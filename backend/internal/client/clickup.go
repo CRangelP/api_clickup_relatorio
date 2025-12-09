@@ -59,8 +59,14 @@ func NewClient(token string) *Client {
 	}
 }
 
+// buildTaskURL constrói a URL para buscar tarefas de uma lista
+func buildTaskURL(listID string, page int, subtasks bool) string {
+	return fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=%t&include_closed=true",
+		baseURL, listID, page, subtasks)
+}
+
 // GetTasks busca todas as tarefas de uma lista com paginação automática e retry
-func (c *Client) GetTasks(ctx context.Context, listID string) ([]model.Task, error) {
+func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]model.Task, error) {
 	var allTasks []model.Task
 	page := 0
 	totalCollected := 0
@@ -71,8 +77,7 @@ func (c *Client) GetTasks(ctx context.Context, listID string) ([]model.Task, err
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
 
-		url := fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=true&include_closed=true",
-			baseURL, listID, page)
+		url := buildTaskURL(listID, page, subtasks)
 
 		// Executa request com retry
 		resp, err := c.doRequestWithRetry(ctx, url, listID, page)
@@ -144,14 +149,14 @@ func (c *Client) doRequestWithRetry(ctx context.Context, url, listID string, pag
 
 // GetTasksMultiple busca tarefas de múltiplas listas com concorrência controlada
 // DEPRECATED: Use GetTasksToStorage para grandes volumes
-func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string) ([]model.Task, error) {
+func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string, subtasks bool) ([]model.Task, error) {
 	storage, err := repository.NewTaskStorage()
 	if err != nil {
 		return nil, fmt.Errorf("criar storage: %w", err)
 	}
 	defer storage.Close()
 
-	if err := c.GetTasksToStorage(ctx, listIDs, storage); err != nil {
+	if err := c.GetTasksToStorage(ctx, listIDs, storage, subtasks); err != nil {
 		return nil, err
 	}
 
@@ -159,7 +164,7 @@ func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string) ([]mode
 }
 
 // GetTasksToStorage busca tarefas e salva diretamente no storage (baixo consumo de memória)
-func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storage *repository.TaskStorage) error {
+func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storage *repository.TaskStorage, subtasks bool) error {
 	totalTasks := 0
 
 	for i, listID := range listIDs {

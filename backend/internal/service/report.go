@@ -45,8 +45,14 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 	defer storage.Close() // Cleanup automático
 
 	// 2. Coleta tasks e salva no storage (não acumula em memória)
-	log.Printf("[Report] Fase 1: Coletando tasks do ClickUp...")
-	if err := s.clickupClient.GetTasksToStorage(ctx, req.ListIDs, storage); err != nil {
+	// Default: false (apenas main tasks, sem subtasks)
+	subtasks := false
+	if req.Subtasks != nil {
+		subtasks = *req.Subtasks
+	}
+
+	log.Printf("[Report] Fase 1: Coletando tasks do ClickUp (subtasks=%v)...", subtasks)
+	if err := s.clickupClient.GetTasksToStorage(ctx, req.ListIDs, storage, subtasks); err != nil {
 		return nil, fmt.Errorf("coletar tasks: %w", err)
 	}
 
