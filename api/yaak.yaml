@@ -1,0 +1,166 @@
+openapi: "3.1.0"
+info:
+  title: ClickUp Excel API
+  description: API para geração de relatórios Excel a partir do ClickUp
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Local
+  - url: https://api.seudominio.com
+    description: Production
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    ReportRequest:
+      type: object
+      required:
+        - list_ids
+        - fields
+      properties:
+        list_ids:
+          type: array
+          items:
+            type: string
+          example: ["901234567890"]
+        fields:
+          type: array
+          items:
+            type: string
+          example: ["name", "status", "assignees", "due_date", "date_created"]
+        webhook_url:
+          type: string
+          format: uri
+          description: URL do webhook para receber o resultado (processamento assíncrono)
+          example: "https://seu-servidor.com/webhook"
+    
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Processamento iniciado. O resultado será enviado para o webhook."
+    
+    WebhookPayload:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+        total_tasks:
+          type: integer
+        total_lists:
+          type: integer
+        file_name:
+          type: string
+        file_base64:
+          type: string
+          description: Arquivo Excel codificado em Base64
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Verifica se a API está funcionando
+      operationId: healthCheck
+      responses:
+        "200":
+          description: API funcionando
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/reports:
+    post:
+      summary: Gerar Relatório Excel
+      description: Busca tarefas do ClickUp e retorna um arquivo Excel
+      operationId: generateReport
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+            examples:
+              basico:
+                summary: Relatório Básico
+                value:
+                  list_ids: ["901234567890"]
+                  fields: ["name", "status", "assignees", "due_date", "date_created"]
+              campos_personalizados:
+                summary: Com Campos Personalizados
+                value:
+                  list_ids: ["901234567890", "901234567891"]
+                  fields: ["name", "status", "due_date", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+              completo:
+                summary: Relatório Completo
+                value:
+                  list_ids: ["901234567890"]
+                  fields: ["id", "name", "description", "status", "priority", "assignees", "tags", "date_created", "date_updated", "due_date", "start_date", "list", "folder", "url"]
+      responses:
+        "200":
+          description: Arquivo Excel gerado com sucesso
+          headers:
+            X-Total-Tasks:
+              schema:
+                type: integer
+              description: Total de tarefas no relatório
+            X-Total-Lists:
+              schema:
+                type: integer
+              description: Total de listas processadas
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Payload inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token inválido ou ausente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit excedido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Erro interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

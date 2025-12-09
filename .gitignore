@@ -1,0 +1,42 @@
+# Binários
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+backend/api
+
+# Arquivos de teste
+*.test
+*.out
+coverage.html
+
+# Dependências
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporários
+tmp/
+temp/
+
+# Docker
+docker-compose.override.yml
