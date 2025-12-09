@@ -78,7 +78,6 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 
 		c.JSON(http.StatusOK, model.Response{
 			Success: true,
-			Message: "Processamento iniciado. O resultado será enviado para o webhook.",
 		})
 		return
 	}

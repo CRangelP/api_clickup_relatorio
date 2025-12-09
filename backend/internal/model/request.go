@@ -10,7 +10,6 @@ type ReportRequest struct {
 // Response representa a resposta padrão da API
 type Response struct {
 	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
 	Meta    *Meta       `json:"meta,omitempty"`
 	Errors  []string    `json:"errors,omitempty"`
@@ -33,10 +32,11 @@ type ErrorResponse struct {
 // WebhookPayload representa o payload enviado para o webhook
 type WebhookPayload struct {
 	Success    bool   `json:"success"`
-	Message    string `json:"message,omitempty"`
 	Error      string `json:"error,omitempty"`
+	FolderName string `json:"folder_name,omitempty"`
 	TotalTasks int    `json:"total_tasks,omitempty"`
 	TotalLists int    `json:"total_lists,omitempty"`
 	FileName   string `json:"file_name,omitempty"`
+	FileMime   string `json:"file_mime,omitempty"`
 	FileBase64 string `json:"file_base64,omitempty"`
 }

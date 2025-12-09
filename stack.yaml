@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  api:
+    image: crangelp/clickup-excel-api:latest
+    environment:
+      - TOKEN_CLICKUP=${TOKEN_CLICKUP}
+      - TOKEN_API=${TOKEN_API}
+      - PORT=8080
+      - GIN_MODE=release
+      - TZ=America/Sao_Paulo
+    networks:
+      - traefik-public
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.clickup-api.rule=Host(`clickup-api.${DOMAIN}`)"
+        - "traefik.http.routers.clickup-api.entrypoints=websecure"
+        - "traefik.http.routers.clickup-api.tls.certresolver=letsencrypt"
+        - "traefik.http.services.clickup-api.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  traefik-public:
+    external: true

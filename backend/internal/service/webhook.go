@@ -34,10 +34,11 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 
 	payload := model.WebhookPayload{
 		Success:    true,
-		Message:    "Relatório gerado com sucesso",
+		FolderName: result.FolderName,
 		TotalTasks: result.TotalTasks,
 		TotalLists: result.TotalLists,
 		FileName:   fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05")),
+		FileMime:   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		FileBase64: fileBase64,
 	}
 

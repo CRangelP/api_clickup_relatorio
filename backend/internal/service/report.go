@@ -27,6 +27,7 @@ type ReportResult struct {
 	Buffer     *bytes.Buffer
 	TotalTasks int
 	TotalLists int
+	FolderName string
 }
 
 // GenerateReport gera um relatório Excel a partir das listas e campos solicitados
@@ -35,6 +36,12 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 	tasks, err := s.clickupClient.GetTasksMultiple(ctx, req.ListIDs)
 	if err != nil {
 		return nil, err
+	}
+
+	// Extrai folder_name da primeira tarefa
+	var folderName string
+	if len(tasks) > 0 {
+		folderName = tasks[0].Folder.Name
 	}
 
 	// Gera Excel
@@ -47,5 +54,6 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 		Buffer:     buf,
 		TotalTasks: len(tasks),
 		TotalLists: len(req.ListIDs),
+		FolderName: folderName,
 	}, nil
 }
