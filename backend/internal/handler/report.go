@@ -136,8 +136,8 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 	// Garante liberação de memória ao final
 	defer forceGC()
 
-	// Timeout de 30 minutos para processar até 35k+ tasks com retries
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	// Timeout de 90 minutos para processar até 200k+ tasks com retries
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	defer cancel()
 
 	log.Printf("[Report Async] Iniciando processamento para webhook: %s (listas: %d, campos: %d)",
