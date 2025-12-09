@@ -24,9 +24,8 @@ type WebhookService struct {
 // NewWebhookService cria um novo serviço de webhook
 func NewWebhookService() *WebhookService {
 	return &WebhookService{
-		httpClient: &http.Client{
-			Timeout: 120 * time.Second, // 2 minutos para webhooks com payloads grandes
-		},
+		// Timeout controlado pelo contexto do processAsync (30min)
+		httpClient: &http.Client{},
 	}
 }
 
@@ -39,41 +38,53 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 	}
 	defer file.Close()
 
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
 
-	// Campos simples
-	if err := writer.WriteField("success", "true"); err != nil {
-		return fmt.Errorf("write success: %w", err)
-	}
-	if err := writer.WriteField("folder_name", result.FolderName); err != nil {
-		return fmt.Errorf("write folder_name: %w", err)
-	}
-	if err := writer.WriteField("total_tasks", fmt.Sprintf("%d", result.TotalTasks)); err != nil {
-		return fmt.Errorf("write total_tasks: %w", err)
-	}
-	if err := writer.WriteField("total_lists", fmt.Sprintf("%d", result.TotalLists)); err != nil {
-		return fmt.Errorf("write total_lists: %w", err)
-	}
-	if err := writer.WriteField("file_mime", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); err != nil {
-		return fmt.Errorf("write file_mime: %w", err)
-	}
+	// escreve multipart em streaming
+	go func() {
+		defer file.Close()
 
-	// Arquivo
-	filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
-	part, err := writer.CreateFormFile("file", filepath.Base(filename))
-	if err != nil {
-		return fmt.Errorf("criar form file: %w", err)
-	}
-	if _, err := io.Copy(part, file); err != nil {
-		return fmt.Errorf("copiar arquivo: %w", err)
-	}
+		if err := writer.WriteField("success", "true"); err != nil {
+			pw.CloseWithError(fmt.Errorf("write success: %w", err))
+			return
+		}
+		if err := writer.WriteField("folder_name", result.FolderName); err != nil {
+			pw.CloseWithError(fmt.Errorf("write folder_name: %w", err))
+			return
+		}
+		if err := writer.WriteField("total_tasks", fmt.Sprintf("%d", result.TotalTasks)); err != nil {
+			pw.CloseWithError(fmt.Errorf("write total_tasks: %w", err))
+			return
+		}
+		if err := writer.WriteField("total_lists", fmt.Sprintf("%d", result.TotalLists)); err != nil {
+			pw.CloseWithError(fmt.Errorf("write total_lists: %w", err))
+			return
+		}
+		if err := writer.WriteField("file_mime", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); err != nil {
+			pw.CloseWithError(fmt.Errorf("write file_mime: %w", err))
+			return
+		}
 
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("fechar writer: %w", err)
-	}
+		filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
+		part, err := writer.CreateFormFile("file", filepath.Base(filename))
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("criar form file: %w", err))
+			return
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			pw.CloseWithError(fmt.Errorf("copiar arquivo: %w", err))
+			return
+		}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, &body)
+		if err := writer.Close(); err != nil {
+			pw.CloseWithError(fmt.Errorf("fechar writer: %w", err))
+			return
+		}
+		_ = pw.Close()
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, pr)
 	if err != nil {
 		return fmt.Errorf("criar request: %w", err)
 	}
