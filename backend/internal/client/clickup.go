@@ -21,7 +21,7 @@ const (
 	MaxConcurrentRequests = 5
 
 	// RequestsPerMinute limite conservador (ClickUp permite 10k/min)
-	RequestsPerMinute = 100
+	RequestsPerMinute = 500
 
 	// DefaultTimeout timeout padrão para requisições
 	DefaultTimeout = 60 * time.Second
@@ -32,8 +32,8 @@ const (
 	// RetryMaxAttempts número máximo de tentativas por página
 	RetryMaxAttempts = 3
 
-	// RetryBackoff tempo de espera entre retries (1m30s)
-	RetryBackoff = 90 * time.Second
+	// RetryBackoff tempo de espera entre retries
+	RetryBackoff = 30 * time.Second
 )
 
 // Client é o cliente HTTP para a API do ClickUp
@@ -55,7 +55,7 @@ func NewClient(token string) *Client {
 				IdleConnTimeout:     30 * time.Second,
 			},
 		},
-		limiter: rate.NewLimiter(rate.Every(time.Minute/RequestsPerMinute), 1),
+		limiter: rate.NewLimiter(rate.Every(time.Minute/RequestsPerMinute), 10),
 	}
 }
 
