@@ -106,10 +106,12 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 
 // processAsync processa o relatório de forma assíncrona e envia para o webhook
 func (h *ReportHandler) processAsync(req model.ReportRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Timeout de 30 minutos para processar até 35k+ tasks com retries
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	log.Printf("[Report Async] Iniciando processamento para webhook: %s", req.WebhookURL)
+	log.Printf("[Report Async] Iniciando processamento para webhook: %s (listas: %d, campos: %d)",
+		req.WebhookURL, len(req.ListIDs), len(req.Fields))
 
 	result, err := h.reportService.GenerateReport(ctx, req)
 	if err != nil {
@@ -120,11 +122,16 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 		return
 	}
 
-	log.Printf("[Report Async] Relatório gerado - Tarefas: %d, Listas: %d",
-		result.TotalTasks, result.TotalLists)
+	log.Printf("[Report Async] Relatório gerado com sucesso - Tarefas: %d, Listas: %d, Folder: %s",
+		result.TotalTasks, result.TotalLists, result.FolderName)
+
+	log.Printf("[Report Async] Enviando para webhook: %s (tamanho: %d bytes)",
+		req.WebhookURL, result.Buffer.Len())
 
 	if err := h.webhookService.SendSuccess(ctx, req.WebhookURL, result); err != nil {
 		log.Printf("[Report Async] Erro ao enviar webhook de sucesso: %v", err)
+	} else {
+		log.Printf("[Report Async] Webhook enviado com sucesso!")
 	}
 }
 

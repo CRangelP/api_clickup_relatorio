@@ -22,7 +22,7 @@ type WebhookService struct {
 func NewWebhookService() *WebhookService {
 	return &WebhookService{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second, // 2 minutos para webhooks com payloads grandes
 		},
 	}
 }

@@ -25,10 +25,16 @@ const (
 	RequestsPerMinute = 100
 
 	// DefaultTimeout timeout padrão para requisições
-	DefaultTimeout = 30 * time.Second
+	DefaultTimeout = 60 * time.Second
 
 	// PageSize tamanho padrão da página do ClickUp
 	PageSize = 100
+
+	// RetryMaxAttempts número máximo de tentativas por página
+	RetryMaxAttempts = 3
+
+	// RetryBackoff tempo de espera entre retries (1m30s)
+	RetryBackoff = 90 * time.Second
 )
 
 // Client é o cliente HTTP para a API do ClickUp
@@ -54,10 +60,11 @@ func NewClient(token string) *Client {
 	}
 }
 
-// GetTasks busca todas as tarefas de uma lista com paginação automática
+// GetTasks busca todas as tarefas de uma lista com paginação automática e retry
 func (c *Client) GetTasks(ctx context.Context, listID string) ([]model.Task, error) {
 	var allTasks []model.Task
 	page := 0
+	totalCollected := 0
 
 	for {
 		// Aguarda rate limiter
@@ -68,15 +75,21 @@ func (c *Client) GetTasks(ctx context.Context, listID string) ([]model.Task, err
 		url := fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=true&include_closed=true",
 			baseURL, listID, page)
 
-		resp, err := c.doRequest(ctx, url)
+		// Executa request com retry
+		resp, err := c.doRequestWithRetry(ctx, url, listID, page)
 		if err != nil {
-			return nil, fmt.Errorf("lista %s página %d: %w", listID, page, err)
+			// Se falhou após todos os retries, retorna o que já coletou + erro
+			log.Printf("[ClickUp] Lista %s - Falha definitiva na página %d após %d tentativas. Coletadas: %d tarefas",
+				listID, page, RetryMaxAttempts, totalCollected)
+			return allTasks, fmt.Errorf("lista %s página %d: %w (coletadas %d tarefas antes do erro)", 
+				listID, page, err, totalCollected)
 		}
 
 		allTasks = append(allTasks, resp.Tasks...)
+		totalCollected = len(allTasks)
 
-		log.Printf("[ClickUp] Lista %s - Página %d: %d tarefas (last_page=%v)",
-			listID, page, len(resp.Tasks), resp.LastPage)
+		log.Printf("[ClickUp] Lista %s - Página %d: %d tarefas (total coletado: %d, last_page=%v)",
+			listID, page, len(resp.Tasks), totalCollected, resp.LastPage)
 
 		// Condição de parada: última página ou menos que PageSize
 		if resp.LastPage || len(resp.Tasks) < PageSize {
@@ -86,7 +99,48 @@ func (c *Client) GetTasks(ctx context.Context, listID string) ([]model.Task, err
 		page++
 	}
 
+	log.Printf("[ClickUp] Lista %s - Concluída: %d tarefas em %d páginas", listID, len(allTasks), page+1)
 	return allTasks, nil
+}
+
+// doRequestWithRetry executa request com retry e backoff
+func (c *Client) doRequestWithRetry(ctx context.Context, url, listID string, page int) (*model.TaskResponse, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= RetryMaxAttempts; attempt++ {
+		resp, err := c.doRequest(ctx, url)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		// Se é erro de contexto cancelado, não faz retry
+		if ctx.Err() != nil {
+			return nil, err
+		}
+
+		// Se é rate limit ou não autorizado, não faz retry
+		if err == model.ErrRateLimited || err == model.ErrUnauthorized || err == model.ErrNotFound {
+			return nil, err
+		}
+
+		// Se ainda tem tentativas, aguarda e tenta novamente
+		if attempt < RetryMaxAttempts {
+			log.Printf("[ClickUp] Lista %s página %d - Tentativa %d/%d falhou: %v. Aguardando %v...",
+				listID, page, attempt, RetryMaxAttempts, err, RetryBackoff)
+
+			select {
+			case <-time.After(RetryBackoff):
+				log.Printf("[ClickUp] Lista %s página %d - Retomando tentativa %d/%d",
+					listID, page, attempt+1, RetryMaxAttempts)
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+
+	return nil, lastErr
 }
 
 // GetTasksMultiple busca tarefas de múltiplas listas com concorrência controlada
