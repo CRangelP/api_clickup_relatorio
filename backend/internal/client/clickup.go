@@ -60,13 +60,13 @@ func NewClient(token string) *Client {
 }
 
 // buildTaskURL constrói a URL para buscar tarefas de uma lista
-func buildTaskURL(listID string, page int, subtasks bool) string {
-	return fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=%t&include_closed=true",
-		baseURL, listID, page, subtasks)
+func buildTaskURL(listID string, page int, subtasks, includeClosed bool) string {
+	return fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=%t&include_closed=%t",
+		baseURL, listID, page, subtasks, includeClosed)
 }
 
 // GetTasks busca todas as tarefas de uma lista com paginação automática e retry
-func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]model.Task, error) {
+func (c *Client) GetTasks(ctx context.Context, listID string, subtasks, includeClosed bool) ([]model.Task, error) {
 	var allTasks []model.Task
 	page := 0
 	totalCollected := 0
@@ -77,7 +77,7 @@ func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
 
-		url := buildTaskURL(listID, page, subtasks)
+		url := buildTaskURL(listID, page, subtasks, includeClosed)
 
 		// Executa request com retry
 		resp, err := c.doRequestWithRetry(ctx, url, listID, page)
@@ -172,14 +172,14 @@ func (c *Client) doRequestWithRetry(ctx context.Context, url, listID string, pag
 
 // GetTasksMultiple busca tarefas de múltiplas listas com concorrência controlada
 // DEPRECATED: Use GetTasksToStorage para grandes volumes
-func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string, subtasks bool) ([]model.Task, error) {
+func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string, subtasks, includeClosed bool) ([]model.Task, error) {
 	storage, err := repository.NewTaskStorage()
 	if err != nil {
 		return nil, fmt.Errorf("criar storage: %w", err)
 	}
 	defer storage.Close()
 
-	if err := c.GetTasksToStorage(ctx, listIDs, storage, subtasks); err != nil {
+	if err := c.GetTasksToStorage(ctx, listIDs, storage, subtasks, includeClosed); err != nil {
 		return nil, err
 	}
 
@@ -187,7 +187,7 @@ func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string, subtask
 }
 
 // GetTasksToStorage busca tarefas e salva diretamente no storage (baixo consumo de memória)
-func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storage *repository.TaskStorage, subtasks bool) error {
+func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storage *repository.TaskStorage, subtasks, includeClosed bool) error {
 	totalTasks := 0
 
 	for i, listID := range listIDs {
@@ -206,7 +206,7 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 				return fmt.Errorf("rate limiter: %w", err)
 			}
 
-			url := buildTaskURL(listID, page, subtasks)
+			url := buildTaskURL(listID, page, subtasks, includeClosed)
 
 			// Executa request com retry
 			resp, err := c.doRequestWithRetry(ctx, url, listID, page)
@@ -303,7 +303,7 @@ func (c *Client) doRequest(ctx context.Context, url string) (*model.TaskResponse
 }
 
 // EstimateTaskCount faz probe rápido para estimar quantidade de tasks nas listas
-func (c *Client) EstimateTaskCount(ctx context.Context, listIDs []string, subtasks bool) (*model.EstimateResult, error) {
+func (c *Client) EstimateTaskCount(ctx context.Context, listIDs []string, subtasks, includeClosed bool) (*model.EstimateResult, error) {
 	log := logger.Get(ctx)
 	estimates := make([]model.TaskEstimate, 0, len(listIDs))
 	totalMin, totalMax := 0, 0
@@ -314,7 +314,7 @@ func (c *Client) EstimateTaskCount(ctx context.Context, listIDs []string, subtas
 		}
 
 		// Busca apenas primeira página
-		url := buildTaskURL(listID, 0, subtasks)
+		url := buildTaskURL(listID, 0, subtasks, includeClosed)
 		resp, err := c.doRequest(ctx, url)
 		if err != nil {
 			log.Warn().

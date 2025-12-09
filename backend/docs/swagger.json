@@ -105,6 +105,10 @@
                         "type": "string"
                     }
                 },
+                "include_closed": {
+                    "description": "nil = false (default: apenas tasks abertas)",
+                    "type": "boolean"
+                },
                 "list_ids": {
                     "type": "array",
                     "minItems": 1,

@@ -2,10 +2,11 @@ package model
 
 // ReportRequest representa o payload de entrada para geração de relatório
 type ReportRequest struct {
-	ListIDs    []string `json:"list_ids" binding:"required,min=1"`
-	Fields     []string `json:"fields" binding:"required,min=1"`
-	WebhookURL string   `json:"webhook_url" binding:"omitempty,url"`
-	Subtasks   *bool    `json:"subtasks,omitempty"` // nil = false (default: apenas main tasks)
+	ListIDs       []string `json:"list_ids" binding:"required,min=1"`
+	Fields        []string `json:"fields" binding:"required,min=1"`
+	WebhookURL    string   `json:"webhook_url" binding:"omitempty,url"`
+	Subtasks      *bool    `json:"subtasks,omitempty"`       // nil = false (default: apenas main tasks)
+	IncludeClosed *bool    `json:"include_closed,omitempty"` // nil = false (default: apenas tasks abertas)
 }
 
 // Response representa a resposta padrão da API

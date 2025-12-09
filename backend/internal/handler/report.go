@@ -94,8 +94,12 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 		if req.Subtasks != nil {
 			subtasks = *req.Subtasks
 		}
+		includeClosed := false
+		if req.IncludeClosed != nil {
+			includeClosed = *req.IncludeClosed
+		}
 		
-		estimate, err := h.reportService.EstimateTasks(c.Request.Context(), req.ListIDs, subtasks)
+		estimate, err := h.reportService.EstimateTasks(c.Request.Context(), req.ListIDs, subtasks, includeClosed)
 		if err != nil {
 			log.Warn().Err(err).Msg("Falha ao estimar tasks, continuando sem estimativa")
 		}

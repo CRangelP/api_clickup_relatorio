@@ -28,6 +28,8 @@ docker pull crangelp/clickup-excel-api:latest
 
 **Tags disponíveis:**
 - `latest` - Versão mais recente
+- `v1.4.1` - Parâmetro `include_closed` (default: false, apenas tasks abertas)
+- `v1.4.0` - Structured logging, request tracing, estimação de tasks
 - `v1.3.0` - Parâmetro opcional `subtasks` (default: apenas main tasks)
 - `v1.2.8` - Melhorias de estabilidade
 - `v1.2.3` - GC forçado + endpoints de debug de memória
@@ -110,7 +112,8 @@ Content-Type: application/json
     "due_date",
     "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
   ],
-  "subtasks": false
+  "subtasks": false,
+  "include_closed": false
 }
 ```
 
@@ -120,6 +123,7 @@ Content-Type: application/json
 | `fields` | array | ✅ | - | Campos a incluir no relatório |
 | `webhook_url` | string | ❌ | - | URL para envio assíncrono |
 | `subtasks` | boolean | ❌ | `false` | Incluir subtasks no relatório |
+| `include_closed` | boolean | ❌ | `false` | Incluir tasks finalizadas |
 
 **Resposta:** Arquivo Excel binário
 
@@ -137,7 +141,8 @@ Content-Type: application/json
   "list_ids": ["901234567890"],
   "fields": ["name", "status", "due_date"],
   "webhook_url": "https://seu-servidor.com/webhook",
-  "subtasks": true
+  "subtasks": false,
+  "include_closed": true
 }
 ```
 

@@ -2,7 +2,7 @@ openapi: "3.1.0"
 info:
   title: ClickUp Excel API
   description: API para geração de relatórios Excel a partir do ClickUp
-  version: "1.4.0"
+  version: "1.4.1"
 
 servers:
   - url: http://localhost:8080
@@ -42,6 +42,10 @@ components:
           type: boolean
           default: false
           description: Incluir subtasks no relatório (default: false, apenas main tasks)
+        include_closed:
+          type: boolean
+          default: false
+          description: Incluir tasks finalizadas (default: false, apenas tasks abertas)
     
     SuccessResponse:
       type: object
@@ -132,17 +136,26 @@ paths:
               $ref: "#/components/schemas/ReportRequest"
             examples:
               basico:
-                summary: Relatório Básico (apenas main tasks)
+                summary: Relatório Básico (apenas main tasks abertas)
                 value:
                   list_ids: ["901234567890"]
                   fields: ["name", "status", "assignees", "due_date", "date_created"]
                   subtasks: false
+                  include_closed: false
               com_subtasks:
                 summary: Relatório com Subtasks
                 value:
                   list_ids: ["901234567890"]
                   fields: ["name", "status", "assignees", "due_date"]
                   subtasks: true
+                  include_closed: false
+              com_finalizadas:
+                summary: Relatório com Tasks Finalizadas
+                value:
+                  list_ids: ["901234567890"]
+                  fields: ["name", "status", "date_closed"]
+                  subtasks: false
+                  include_closed: true
               webhook_async:
                 summary: Processamento Assíncrono (webhook)
                 value:
@@ -150,12 +163,14 @@ paths:
                   fields: ["name", "status", "due_date"]
                   webhook_url: "https://seu-servidor.com/webhook"
                   subtasks: false
+                  include_closed: false
               completo:
-                summary: Relatório Completo
+                summary: Relatório Completo (todas as tasks)
                 value:
                   list_ids: ["901234567890"]
-                  fields: ["id", "name", "description", "status", "priority", "assignees", "tags", "date_created", "date_updated", "due_date", "start_date", "list", "folder", "url"]
-                  subtasks: false
+                  fields: ["id", "name", "description", "status", "priority", "assignees", "tags", "date_created", "date_updated", "date_closed", "due_date", "start_date", "list", "folder", "url"]
+                  subtasks: true
+                  include_closed: true
       responses:
         "200":
           description: Arquivo Excel gerado com sucesso

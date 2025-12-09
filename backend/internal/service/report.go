@@ -33,8 +33,8 @@ type ReportResult struct {
 }
 
 // EstimateTasks faz uma estimativa rápida das tasks antes de coletar
-func (s *ReportService) EstimateTasks(ctx context.Context, listIDs []string, subtasks bool) (*model.EstimateResult, error) {
-	return s.clickupClient.EstimateTaskCount(ctx, listIDs, subtasks)
+func (s *ReportService) EstimateTasks(ctx context.Context, listIDs []string, subtasks, includeClosed bool) (*model.EstimateResult, error) {
+	return s.clickupClient.EstimateTaskCount(ctx, listIDs, subtasks, includeClosed)
 }
 
 // GenerateReport gera um relatório Excel a partir das listas e campos solicitados
@@ -60,8 +60,17 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 		subtasks = *req.Subtasks
 	}
 
-	log.Info().Bool("subtasks", subtasks).Msg("Fase 1: Coletando tasks do ClickUp")
-	if err := s.clickupClient.GetTasksToStorage(ctx, req.ListIDs, storage, subtasks); err != nil {
+	// Default: false (apenas tasks abertas)
+	includeClosed := false
+	if req.IncludeClosed != nil {
+		includeClosed = *req.IncludeClosed
+	}
+
+	log.Info().
+		Bool("subtasks", subtasks).
+		Bool("include_closed", includeClosed).
+		Msg("Fase 1: Coletando tasks do ClickUp")
+	if err := s.clickupClient.GetTasksToStorage(ctx, req.ListIDs, storage, subtasks, includeClosed); err != nil {
 		return nil, fmt.Errorf("coletar tasks: %w", err)
 	}
 
