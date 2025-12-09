@@ -5,12 +5,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 	"github.com/cleberrangel/clickup-excel-api/internal/service"
 	"github.com/gin-gonic/gin"
 )
+
+// forceGC força garbage collection e libera memória ao OS
+func forceGC() {
+	runtime.GC()
+	debug.FreeOSMemory()
+	log.Printf("[GC] Memória liberada")
+}
 
 // ReportHandler manipula requisições de relatório
 type ReportHandler struct {
@@ -85,6 +94,7 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 	// Processamento síncrono (sem webhook)
 	result, err := h.reportService.GenerateReport(c.Request.Context(), req)
 	if err != nil {
+		forceGC() // Libera memória mesmo em caso de erro
 		h.handleError(c, err)
 		return
 	}
@@ -102,10 +112,17 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 	c.Header("X-Total-Lists", fmt.Sprintf("%d", result.TotalLists))
 
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Buffer.Bytes())
+
+	// Libera memória após enviar resposta
+	result.Buffer = nil
+	forceGC()
 }
 
 // processAsync processa o relatório de forma assíncrona e envia para o webhook
 func (h *ReportHandler) processAsync(req model.ReportRequest) {
+	// Garante liberação de memória ao final
+	defer forceGC()
+
 	// Timeout de 30 minutos para processar até 35k+ tasks com retries
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -133,6 +150,9 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 	} else {
 		log.Printf("[Report Async] Webhook enviado com sucesso!")
 	}
+
+	// Libera buffer
+	result.Buffer = nil
 }
 
 // handleError trata erros e retorna resposta apropriada

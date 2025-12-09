@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"runtime"
+	"runtime/debug"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/client"
 	"github.com/cleberrangel/clickup-excel-api/internal/config"
@@ -36,6 +38,31 @@ func main() {
 	// Health check (público)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	// Debug memory endpoint (público)
+	r.GET("/debug/memory", func(c *gin.Context) {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+
+		c.JSON(200, gin.H{
+			"alloc_mb":       m.Alloc / 1024 / 1024,
+			"total_alloc_mb": m.TotalAlloc / 1024 / 1024,
+			"sys_mb":         m.Sys / 1024 / 1024,
+			"heap_alloc_mb":  m.HeapAlloc / 1024 / 1024,
+			"heap_inuse_mb":  m.HeapInuse / 1024 / 1024,
+			"heap_objects":   m.HeapObjects,
+			"goroutines":     runtime.NumGoroutine(),
+			"gc_runs":        m.NumGC,
+			"gc_pause_total": m.PauseTotalNs / 1000000, // ms
+		})
+	})
+
+	// Force GC endpoint (público)
+	r.POST("/debug/gc", func(c *gin.Context) {
+		runtime.GC()
+		debug.FreeOSMemory()
+		c.JSON(200, gin.H{"status": "gc_completed"})
 	})
 
 	// Grupo de rotas protegidas
