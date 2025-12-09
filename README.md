@@ -28,6 +28,7 @@ docker pull crangelp/clickup-excel-api:latest
 
 **Tags disponíveis:**
 - `latest` - Versão mais recente
+- `v1.2.1` - Fix isolamento de requisições paralelas
 - `v1.2.0` - Streaming + baixo consumo de memória
 - `v1.1.0` - Retry com backoff
 - `v1.0.0` - Versão inicial
