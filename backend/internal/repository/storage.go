@@ -13,6 +13,23 @@ import (
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 )
 
+// DataDir é o diretório para arquivos temporários (pode ser montado como volume)
+// Usa variável de ambiente DATA_DIR ou fallback para /tmp
+var DataDir = getDataDir()
+
+func getDataDir() string {
+	if dir := os.Getenv("DATA_DIR"); dir != "" {
+		// Garante que o diretório existe
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("[Storage] Aviso: não foi possível criar DATA_DIR %s: %v, usando /tmp", dir, err)
+			return os.TempDir()
+		}
+		log.Printf("[Storage] Usando DATA_DIR: %s", dir)
+		return dir
+	}
+	return os.TempDir()
+}
+
 // requestCounter é um contador atômico para gerar IDs únicos por requisição
 var requestCounter int32
 
@@ -37,8 +54,8 @@ func NewTaskStorage() (*TaskStorage, error) {
 	// Gera ID único para esta requisição
 	reqID := nextRequestID()
 
-	// Cria arquivo temporário com ID único
-	file, err := os.CreateTemp("", fmt.Sprintf("clickup_tasks_%d_*.jsonl", reqID))
+	// Cria arquivo temporário com ID único no DataDir
+	file, err := os.CreateTemp(DataDir, fmt.Sprintf("clickup_tasks_%d_*.jsonl", reqID))
 	if err != nil {
 		return nil, fmt.Errorf("criar arquivo temporário: %w", err)
 	}

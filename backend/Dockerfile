@@ -33,6 +33,13 @@ RUN adduser -D -g '' appuser
 
 WORKDIR /app
 
+# Cria diretório de dados para arquivos temporários (pode ser montado como volume)
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
+VOLUME /app/data
+
+# Variável de ambiente para diretório de dados
+ENV DATA_DIR=/app/data
+
 # Copia binário do builder
 COPY --from=builder /api .
 
