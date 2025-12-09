@@ -1,0 +1,330 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-12-09T23:36:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2023.5.8",
+  "resources": [
+    {
+      "_id": "wrk_clickup",
+      "parentId": null,
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "ClickUp Excel API",
+      "description": "API para geração de relatórios Excel a partir do ClickUp (v1.4.1)",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_base",
+      "parentId": "wrk_clickup",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "Base Environment",
+      "data": {},
+      "dataPropertyOrder": null,
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1702166160000,
+      "_type": "environment"
+    },
+    {
+      "_id": "env_local",
+      "parentId": "env_base",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "Local",
+      "data": {
+        "baseUrl": "http://localhost:8080",
+        "apiToken": "seu-token-api-aqui"
+      },
+      "dataPropertyOrder": {
+        "&": ["baseUrl", "apiToken"]
+      },
+      "color": "#7ecf2b",
+      "isPrivate": false,
+      "metaSortKey": 1702166160001,
+      "_type": "environment"
+    },
+    {
+      "_id": "env_prod",
+      "parentId": "env_base",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "Production",
+      "data": {
+        "baseUrl": "https://clickup-api.seudominio.com",
+        "apiToken": "seu-token-api-aqui"
+      },
+      "dataPropertyOrder": {
+        "&": ["baseUrl", "apiToken"]
+      },
+      "color": "#e97202",
+      "isPrivate": false,
+      "metaSortKey": 1702166160002,
+      "_type": "environment"
+    },
+    {
+      "_id": "fld_health",
+      "parentId": "wrk_clickup",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "Health & Debug",
+      "description": "Endpoints de monitoramento",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -1702166160000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_reports",
+      "parentId": "wrk_clickup",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "name": "Reports",
+      "description": "Geração de relatórios Excel",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -1702166160001,
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_health",
+      "parentId": "fld_health",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/health",
+      "name": "Health Check",
+      "description": "Verifica se a API está funcionando",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1702166160000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_debug_memory",
+      "parentId": "fld_health",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/debug/memory",
+      "name": "Debug Memory",
+      "description": "Verifica uso de memória",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1702166160001,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_force_gc",
+      "parentId": "fld_health",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/debug/gc",
+      "name": "Force GC",
+      "description": "Força garbage collection",
+      "method": "POST",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1702166160002,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_report_basico",
+      "parentId": "fld_reports",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/api/v1/reports",
+      "name": "Relatório Básico (main tasks abertas)",
+      "description": "Apenas tasks principais abertas",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"list_ids\": [\"901234567890\"],\n  \"fields\": [\"name\", \"status\", \"assignees\", \"due_date\", \"date_created\"],\n  \"subtasks\": false,\n  \"include_closed\": false\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.apiToken }}"
+      },
+      "metaSortKey": -1702166160000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_report_subtasks",
+      "parentId": "fld_reports",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/api/v1/reports",
+      "name": "Relatório com Subtasks",
+      "description": "Inclui subtasks no relatório",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"list_ids\": [\"901234567890\"],\n  \"fields\": [\"name\", \"status\", \"assignees\", \"due_date\"],\n  \"subtasks\": true,\n  \"include_closed\": false\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.apiToken }}"
+      },
+      "metaSortKey": -1702166160001,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_report_finalizadas",
+      "parentId": "fld_reports",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/api/v1/reports",
+      "name": "Relatório com Tasks Finalizadas",
+      "description": "Inclui tasks fechadas/completadas",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"list_ids\": [\"901234567890\"],\n  \"fields\": [\"name\", \"status\", \"date_closed\"],\n  \"subtasks\": false,\n  \"include_closed\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.apiToken }}"
+      },
+      "metaSortKey": -1702166160002,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_report_webhook",
+      "parentId": "fld_reports",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/api/v1/reports",
+      "name": "Relatório Assíncrono (Webhook)",
+      "description": "Processamento em background com envio via webhook",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"list_ids\": [\"901234567890\", \"901234567891\"],\n  \"fields\": [\"name\", \"status\", \"due_date\"],\n  \"webhook_url\": \"https://seu-servidor.com/webhook\",\n  \"subtasks\": false,\n  \"include_closed\": false\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.apiToken }}"
+      },
+      "metaSortKey": -1702166160003,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_report_completo",
+      "parentId": "fld_reports",
+      "modified": 1702166160000,
+      "created": 1702166160000,
+      "url": "{{ _.baseUrl }}/api/v1/reports",
+      "name": "Relatório Completo (todas as tasks)",
+      "description": "Todos os campos, subtasks e tasks finalizadas",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"list_ids\": [\"901234567890\"],\n  \"fields\": [\"id\", \"name\", \"description\", \"status\", \"priority\", \"assignees\", \"tags\", \"date_created\", \"date_updated\", \"date_closed\", \"due_date\", \"start_date\", \"list\", \"folder\", \"url\"],\n  \"subtasks\": true,\n  \"include_closed\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.apiToken }}"
+      },
+      "metaSortKey": -1702166160004,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    }
+  ]
+}
