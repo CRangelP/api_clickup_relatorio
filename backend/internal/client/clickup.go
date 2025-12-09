@@ -7,11 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
-	"golang.org/x/sync/errgroup"
+	"github.com/cleberrangel/clickup-excel-api/internal/repository"
 	"golang.org/x/time/rate"
 )
 
@@ -144,49 +143,72 @@ func (c *Client) doRequestWithRetry(ctx context.Context, url, listID string, pag
 }
 
 // GetTasksMultiple busca tarefas de múltiplas listas com concorrência controlada
+// DEPRECATED: Use GetTasksToStorage para grandes volumes
 func (c *Client) GetTasksMultiple(ctx context.Context, listIDs []string) ([]model.Task, error) {
-	var (
-		allTasks []model.Task
-		mu       sync.Mutex
-	)
-
-	g, gCtx := errgroup.WithContext(ctx)
-
-	// Semáforo para limitar concorrência
-	sem := make(chan struct{}, MaxConcurrentRequests)
-
-	for _, listID := range listIDs {
-		listID := listID // capture loop variable
-
-		g.Go(func() error {
-			// Adquire slot no semáforo
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-gCtx.Done():
-				return gCtx.Err()
-			}
-
-			tasks, err := c.GetTasks(gCtx, listID)
-			if err != nil {
-				return err
-			}
-
-			mu.Lock()
-			allTasks = append(allTasks, tasks...)
-			mu.Unlock()
-
-			return nil
-		})
+	storage, err := repository.NewTaskStorage()
+	if err != nil {
+		return nil, fmt.Errorf("criar storage: %w", err)
 	}
+	defer storage.Close()
 
-	if err := g.Wait(); err != nil {
+	if err := c.GetTasksToStorage(ctx, listIDs, storage); err != nil {
 		return nil, err
 	}
 
-	log.Printf("[ClickUp] Total: %d tarefas de %d listas", len(allTasks), len(listIDs))
+	return storage.ReadAllTasks()
+}
 
-	return allTasks, nil
+// GetTasksToStorage busca tarefas e salva diretamente no storage (baixo consumo de memória)
+func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storage *repository.TaskStorage) error {
+	totalTasks := 0
+
+	for i, listID := range listIDs {
+		log.Printf("[ClickUp] Processando lista %d/%d: %s", i+1, len(listIDs), listID)
+
+		page := 0
+		listTasks := 0
+
+		for {
+			// Aguarda rate limiter
+			if err := c.limiter.Wait(ctx); err != nil {
+				return fmt.Errorf("rate limiter: %w", err)
+			}
+
+			url := fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=true&include_closed=true",
+				baseURL, listID, page)
+
+			// Executa request com retry
+			resp, err := c.doRequestWithRetry(ctx, url, listID, page)
+			if err != nil {
+				log.Printf("[ClickUp] Lista %s - Falha na página %d: %v. Continuando com %d tarefas coletadas.",
+					listID, page, err, listTasks)
+				break // Continua para próxima lista
+			}
+
+			// Salva tasks no storage (não acumula em memória)
+			if err := storage.AppendTasks(resp.Tasks); err != nil {
+				return fmt.Errorf("salvar tasks no storage: %w", err)
+			}
+
+			listTasks += len(resp.Tasks)
+			totalTasks += len(resp.Tasks)
+
+			log.Printf("[ClickUp] Lista %s - Página %d: %d tarefas (lista: %d, total: %d, last_page=%v)",
+				listID, page, len(resp.Tasks), listTasks, totalTasks, resp.LastPage)
+
+			// Condição de parada: última página ou menos que PageSize
+			if resp.LastPage || len(resp.Tasks) < PageSize {
+				break
+			}
+
+			page++
+		}
+
+		log.Printf("[ClickUp] Lista %s - Concluída: %d tarefas em %d páginas", listID, listTasks, page+1)
+	}
+
+	log.Printf("[ClickUp] Total: %d tarefas de %d listas salvas no storage", totalTasks, len(listIDs))
+	return nil
 }
 
 // doRequest executa uma requisição HTTP para a API do ClickUp
