@@ -7,11 +7,19 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 )
+
+// requestCounter é um contador atômico para gerar IDs únicos por requisição
+var requestCounter int32
+
+// nextRequestID retorna o próximo ID de requisição (thread-safe)
+func nextRequestID() int32 {
+	return atomic.AddInt32(&requestCounter, 1)
+}
 
 // TaskStorage gerencia persistência temporária de tasks em disco
 type TaskStorage struct {
@@ -21,25 +29,28 @@ type TaskStorage struct {
 	encoder    *json.Encoder
 	taskCount  int
 	folderName string
+	requestID  int32
 }
 
-// NewTaskStorage cria um novo storage temporário
+// NewTaskStorage cria um novo storage temporário com ID único
 func NewTaskStorage() (*TaskStorage, error) {
-	// Cria arquivo temporário
-	tmpDir := os.TempDir()
-	filePath := filepath.Join(tmpDir, fmt.Sprintf("clickup_tasks_%d.jsonl", os.Getpid()))
+	// Gera ID único para esta requisição
+	reqID := nextRequestID()
 
-	file, err := os.Create(filePath)
+	// Cria arquivo temporário com ID único
+	file, err := os.CreateTemp("", fmt.Sprintf("clickup_tasks_%d_*.jsonl", reqID))
 	if err != nil {
 		return nil, fmt.Errorf("criar arquivo temporário: %w", err)
 	}
 
-	log.Printf("[Storage] Arquivo temporário criado: %s", filePath)
+	filePath := file.Name()
+	log.Printf("[Storage] Requisição #%d - Arquivo temporário criado: %s", reqID, filePath)
 
 	return &TaskStorage{
-		file:     file,
-		filePath: filePath,
-		encoder:  json.NewEncoder(file),
+		file:      file,
+		filePath:  filePath,
+		encoder:   json.NewEncoder(file),
+		requestID: reqID,
 	}, nil
 }
 
@@ -154,8 +165,13 @@ func (s *TaskStorage) Close() error {
 		return err
 	}
 
-	log.Printf("[Storage] Arquivo temporário removido: %s", s.filePath)
+	log.Printf("[Storage] Requisição #%d - Arquivo temporário removido: %s", s.requestID, s.filePath)
 	return nil
+}
+
+// GetRequestID retorna o ID da requisição
+func (s *TaskStorage) GetRequestID() int32 {
+	return s.requestID
 }
 
 // GetFilePath retorna o caminho do arquivo (para debug)
