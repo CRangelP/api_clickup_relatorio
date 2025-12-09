@@ -1,12 +1,9 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"os"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/client"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
@@ -29,7 +26,7 @@ func NewReportService(clickupClient *client.Client) *ReportService {
 
 // ReportResult contém o resultado da geração do relatório
 type ReportResult struct {
-	Buffer     *bytes.Buffer
+	FilePath   string
 	TotalTasks int
 	TotalLists int
 	FolderName string
@@ -64,27 +61,11 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 	if err != nil {
 		return nil, fmt.Errorf("gerar excel: %w", err)
 	}
-	defer os.Remove(excelPath) // Cleanup do arquivo Excel
 
 	log.Printf("[Report] Fase 2 concluída: Excel gerado em %s", excelPath)
 
-	// 4. Lê o arquivo Excel para buffer (necessário para enviar via webhook)
-	log.Printf("[Report] Fase 3: Carregando Excel para envio...")
-	excelFile, err := os.Open(excelPath)
-	if err != nil {
-		return nil, fmt.Errorf("abrir excel: %w", err)
-	}
-	defer excelFile.Close()
-
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, excelFile); err != nil {
-		return nil, fmt.Errorf("ler excel: %w", err)
-	}
-
-	log.Printf("[Report] Fase 3 concluída: Excel carregado (%d bytes)", buf.Len())
-
 	return &ReportResult{
-		Buffer:     buf,
+		FilePath:   excelPath,
 		TotalTasks: totalTasks,
 		TotalLists: len(req.ListIDs),
 		FolderName: folderName,

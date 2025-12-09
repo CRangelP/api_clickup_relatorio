@@ -3,11 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
@@ -29,20 +32,66 @@ func NewWebhookService() *WebhookService {
 
 // SendSuccess envia o resultado de sucesso para o webhook
 func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, result *ReportResult) error {
-	// Converte o arquivo para base64
-	fileBase64 := base64.StdEncoding.EncodeToString(result.Buffer.Bytes())
+	// Abre arquivo para stream
+	file, err := os.Open(result.FilePath)
+	if err != nil {
+		return fmt.Errorf("abrir arquivo: %w", err)
+	}
+	defer file.Close()
 
-	payload := model.WebhookPayload{
-		Success:    true,
-		FolderName: result.FolderName,
-		TotalTasks: result.TotalTasks,
-		TotalLists: result.TotalLists,
-		FileName:   fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05")),
-		FileMime:   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		FileBase64: fileBase64,
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	// Campos simples
+	if err := writer.WriteField("success", "true"); err != nil {
+		return fmt.Errorf("write success: %w", err)
+	}
+	if err := writer.WriteField("folder_name", result.FolderName); err != nil {
+		return fmt.Errorf("write folder_name: %w", err)
+	}
+	if err := writer.WriteField("total_tasks", fmt.Sprintf("%d", result.TotalTasks)); err != nil {
+		return fmt.Errorf("write total_tasks: %w", err)
+	}
+	if err := writer.WriteField("total_lists", fmt.Sprintf("%d", result.TotalLists)); err != nil {
+		return fmt.Errorf("write total_lists: %w", err)
+	}
+	if err := writer.WriteField("file_mime", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); err != nil {
+		return fmt.Errorf("write file_mime: %w", err)
 	}
 
-	return w.send(ctx, webhookURL, payload)
+	// Arquivo
+	filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
+	part, err := writer.CreateFormFile("file", filepath.Base(filename))
+	if err != nil {
+		return fmt.Errorf("criar form file: %w", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return fmt.Errorf("copiar arquivo: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("fechar writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, &body)
+	if err != nil {
+		return fmt.Errorf("criar request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := w.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("enviar webhook: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("webhook retornou status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	log.Printf("[Webhook] Enviado com sucesso para %s (status: %d)", webhookURL, resp.StatusCode)
+	return nil
 }
 
 // SendError envia o resultado de erro para o webhook

@@ -3,8 +3,10 @@ package handler
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -105,17 +107,28 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 	// Configura headers de resposta
 	filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
 
+	file, err := os.Open(result.FilePath)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	defer file.Close()
+	defer os.Remove(result.FilePath)
+
+	stat, _ := file.Stat()
+
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Header("Content-Length", fmt.Sprintf("%d", result.Buffer.Len()))
+	if stat != nil {
+		c.Header("Content-Length", fmt.Sprintf("%d", stat.Size()))
+	}
 	c.Header("X-Total-Tasks", fmt.Sprintf("%d", result.TotalTasks))
 	c.Header("X-Total-Lists", fmt.Sprintf("%d", result.TotalLists))
 
-	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Buffer.Bytes())
-
-	// Libera memória após enviar resposta
-	result.Buffer = nil
-	forceGC()
+	if _, err := io.Copy(c.Writer, file); err != nil {
+		h.handleError(c, err)
+		return
+	}
 }
 
 // processAsync processa o relatório de forma assíncrona e envia para o webhook
@@ -142,17 +155,20 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 	log.Printf("[Report Async] Relatório gerado com sucesso - Tarefas: %d, Listas: %d, Folder: %s",
 		result.TotalTasks, result.TotalLists, result.FolderName)
 
+	stat, _ := os.Stat(result.FilePath)
+	size := int64(0)
+	if stat != nil {
+		size = stat.Size()
+	}
+
 	log.Printf("[Report Async] Enviando para webhook: %s (tamanho: %d bytes)",
-		req.WebhookURL, result.Buffer.Len())
+		req.WebhookURL, size)
 
 	if err := h.webhookService.SendSuccess(ctx, req.WebhookURL, result); err != nil {
 		log.Printf("[Report Async] Erro ao enviar webhook de sucesso: %v", err)
 	} else {
 		log.Printf("[Report Async] Webhook enviado com sucesso!")
 	}
-
-	// Libera buffer
-	result.Buffer = nil
 }
 
 // handleError trata erros e retorna resposta apropriada

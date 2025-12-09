@@ -49,11 +49,6 @@ func (g *ExcelGenerator) Generate(tasks []model.Task, fields []string) (*bytes.B
 		return nil, fmt.Errorf("escrever dados: %w", err)
 	}
 
-	// Ajusta largura das colunas
-	if err := g.autoFitColumns(f, len(headers)); err != nil {
-		return nil, fmt.Errorf("ajustar colunas: %w", err)
-	}
-
 	// Escreve para buffer
 	buf := new(bytes.Buffer)
 	if err := f.Write(buf); err != nil {
@@ -177,18 +172,6 @@ func (g *ExcelGenerator) writeData(f *excelize.File, tasks []model.Task, fields 
 	return nil
 }
 
-// autoFitColumns ajusta a largura das colunas
-func (g *ExcelGenerator) autoFitColumns(f *excelize.File, numCols int) error {
-	for col := 1; col <= numCols; col++ {
-		colName, _ := excelize.ColumnNumberToName(col)
-		// Largura mínima de 15, máxima de 50
-		if err := f.SetColWidth(sheetName, colName, colName, 20); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // GenerateFromStorage gera Excel lendo tasks do storage via streaming (baixo consumo de memória)
 func (g *ExcelGenerator) GenerateFromStorage(storage *repository.TaskStorage, fields []string) (string, error) {
 	f := excelize.NewFile()
@@ -218,73 +201,78 @@ func (g *ExcelGenerator) GenerateFromStorage(storage *repository.TaskStorage, fi
 	// Resolve headers
 	headers := g.resolveHeadersFromTask(fields, firstTask)
 
-	// Escreve cabeçalhos
-	if err := g.writeHeaders(f, headers); err != nil {
+	streamWriter, err := f.NewStreamWriter(sheetName)
+	if err != nil {
+		return "", fmt.Errorf("criar stream writer: %w", err)
+	}
+
+	// Header style único para reduzir cache de estilos
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Bold:  true,
+			Size:  11,
+			Color: "FFFFFF",
+		},
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"4472C4"},
+			Pattern: 1,
+		},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+	})
+
+	// Escreve cabeçalhos (linha 1)
+	if err := streamWriter.SetRow("A1", toInterfaces(headers), excelize.RowOpts{StyleID: headerStyle}); err != nil {
 		return "", fmt.Errorf("escrever headers: %w", err)
 	}
 
-	// Cria estilos
-	styleOdd, _ := f.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{
-			Type:    "pattern",
-			Color:   []string{"F2F2F2"},
-			Pattern: 1,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "D9D9D9", Style: 1},
-			{Type: "top", Color: "D9D9D9", Style: 1},
-			{Type: "bottom", Color: "D9D9D9", Style: 1},
-			{Type: "right", Color: "D9D9D9", Style: 1},
-		},
-	})
+	// Escreve tasks em streaming linha a linha
+	row := 2 // linha 1 é header
+	writeTask := func(task model.Task) error {
+		values := make([]interface{}, len(fields))
+		for i, field := range fields {
+			values[i] = g.extractor.ExtractValue(field, task)
+		}
+		cell, _ := excelize.CoordinatesToCellName(1, row)
+		if err := streamWriter.SetRow(cell, values); err != nil {
+			return err
+		}
+		row++
+		if (row-2)%1000 == 0 { // log a cada 1000 tasks processadas
+			log.Printf("[Excel] Processadas %d tarefas...", row-2)
+		}
+		return nil
+	}
 
-	styleEven, _ := f.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{
-			Type:    "pattern",
-			Color:   []string{"FFFFFF"},
-			Pattern: 1,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "D9D9D9", Style: 1},
-			{Type: "top", Color: "D9D9D9", Style: 1},
-			{Type: "bottom", Color: "D9D9D9", Style: 1},
-			{Type: "right", Color: "D9D9D9", Style: 1},
-		},
-	})
-
-	// Escreve primeira task se existir
-	row := 0
 	if hasFirst {
-		if err := g.writeTaskRow(f, firstTask, fields, row, styleEven, styleOdd); err != nil {
-			return "", err
+		if err := writeTask(firstTask); err != nil {
+			return "", fmt.Errorf("escrever primeira task: %w", err)
 		}
-		row++
 	}
 
-	// Escreve restante das tasks em streaming
 	for iter.Next() {
-		task := iter.Task()
-		if err := g.writeTaskRow(f, task, fields, row, styleEven, styleOdd); err != nil {
+		if err := writeTask(iter.Task()); err != nil {
 			return "", err
 		}
-		row++
-
-		// Log de progresso a cada 1000 tasks
-		if row%1000 == 0 {
-			log.Printf("[Excel] Processadas %d tarefas...", row)
-		}
 	}
-
 	if err := iter.Err(); err != nil {
 		return "", fmt.Errorf("erro ao iterar tasks: %w", err)
 	}
 
-	log.Printf("[Excel] Total de %d tarefas escritas no Excel", row)
-
-	// Ajusta largura das colunas
-	if err := g.autoFitColumns(f, len(headers)); err != nil {
-		return "", fmt.Errorf("ajustar colunas: %w", err)
+	if err := streamWriter.Flush(); err != nil {
+		return "", fmt.Errorf("flush stream writer: %w", err)
 	}
+
+	log.Printf("[Excel] Total de %d tarefas escritas no Excel", row-2)
 
 	// Salva em arquivo temporário
 	tmpFile, err := os.CreateTemp("", "report_*.xlsx")
@@ -303,30 +291,6 @@ func (g *ExcelGenerator) GenerateFromStorage(storage *repository.TaskStorage, fi
 	return tmpPath, nil
 }
 
-// writeTaskRow escreve uma linha de task no Excel
-func (g *ExcelGenerator) writeTaskRow(f *excelize.File, task model.Task, fields []string, row int, styleEven, styleOdd int) error {
-	excelRow := row + 2 // Linha 1 é header
-
-	style := styleEven
-	if row%2 == 1 {
-		style = styleOdd
-	}
-
-	for col, field := range fields {
-		cell, _ := excelize.CoordinatesToCellName(col+1, excelRow)
-		value := g.extractor.ExtractValue(field, task)
-
-		if err := f.SetCellValue(sheetName, cell, value); err != nil {
-			return err
-		}
-		if err := f.SetCellStyle(sheetName, cell, cell, style); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // resolveHeadersFromTask resolve headers a partir de uma task
 func (g *ExcelGenerator) resolveHeadersFromTask(fields []string, task model.Task) []string {
 	headers := make([]string, len(fields))
@@ -334,4 +298,13 @@ func (g *ExcelGenerator) resolveHeadersFromTask(fields []string, task model.Task
 		headers[i] = g.extractor.ResolveHeader(field, task)
 	}
 	return headers
+}
+
+// toInterfaces converte []string para []interface{} para uso no StreamWriter
+func toInterfaces(values []string) []interface{} {
+	out := make([]interface{}, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }

@@ -8,8 +8,8 @@ API REST para geração de relatórios Excel dinâmicos a partir de dados do Cli
 - **Paginação Automática**: Busca todas as tarefas independente do tamanho da lista
 - **Rate Limiting**: Controle de concorrência para respeitar limites da API do ClickUp
 - **Retry com Backoff**: Retry automático (3x) com espera de 90s em caso de timeout
-- **Streaming**: Processamento em streaming para baixo consumo de memória (~300MB para 35k+ tasks)
-- **Webhook Assíncrono**: Processamento em background com envio do resultado via webhook
+- **Streaming**: Processamento em streaming para baixo consumo de memória (~300MB para 35k+ tasks) e envio binário direto (sem base64)
+- **Webhook Assíncrono**: Processamento em background com envio do resultado via webhook multipart/form-data
 - **Tratamento de Tipos**: Conversão automática de dropdowns, datas, moedas, etc.
 - **Timezone**: Datas formatadas em `America/Sao_Paulo`
 - **Segurança**: Autenticação via Bearer Token
@@ -137,20 +137,15 @@ Content-Type: application/json
 }
 ```
 
-**Payload enviado para o webhook (sucesso):**
-```json
-{
-  "success": true,
-  "folder_name": "Nome da Pasta",
-  "total_tasks": 35000,
-  "total_lists": 5,
-  "file_name": "relatorio_2025-12-09_00-15-00.xlsx",
-  "file_mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "file_base64": "UEsDBBQAAAAI..."
-}
-```
+**Payload enviado para o webhook (sucesso) – multipart/form-data:**
+- `success`: `"true"`
+- `folder_name`: `"Nome da Pasta"`
+- `total_tasks`: `"35000"`
+- `total_lists`: `"5"`
+- `file_mime`: `"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"`
+- `file`: arquivo binário `relatorio_2025-12-09_00-15-00.xlsx`
 
-**Payload enviado para o webhook (erro):**
+**Payload enviado para o webhook (erro) – JSON:**
 ```json
 {
   "success": false,
