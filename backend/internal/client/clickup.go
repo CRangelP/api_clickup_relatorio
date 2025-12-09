@@ -21,7 +21,7 @@ const (
 	MaxConcurrentRequests = 5
 
 	// RequestsPerMinute limite conservador (ClickUp permite 10k/min)
-	RequestsPerMinute = 500
+	RequestsPerMinute = 2000
 
 	// DefaultTimeout timeout padrão para requisições
 	DefaultTimeout = 60 * time.Second
@@ -55,7 +55,7 @@ func NewClient(token string) *Client {
 				IdleConnTimeout:     30 * time.Second,
 			},
 		},
-		limiter: rate.NewLimiter(rate.Every(time.Minute/RequestsPerMinute), 10),
+		limiter: rate.NewLimiter(rate.Every(time.Minute/RequestsPerMinute), 50),
 	}
 }
 
