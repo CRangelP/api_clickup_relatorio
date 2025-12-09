@@ -28,6 +28,8 @@ docker pull crangelp/clickup-excel-api:latest
 
 **Tags disponíveis:**
 - `latest` - Versão mais recente
+- `v1.3.0` - Parâmetro opcional `subtasks` (default: apenas main tasks)
+- `v1.2.8` - Melhorias de estabilidade
 - `v1.2.3` - GC forçado + endpoints de debug de memória
 - `v1.2.2` - Suporte a volume para persistência
 - `v1.2.1` - Fix isolamento de requisições paralelas
@@ -107,9 +109,17 @@ Content-Type: application/json
     "assignees",
     "due_date",
     "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-  ]
+  ],
+  "subtasks": false
 }
 ```
+
+| Parâmetro | Tipo | Obrigatório | Default | Descrição |
+|-----------|------|-------------|---------|-----------|
+| `list_ids` | array | ✅ | - | IDs das listas do ClickUp |
+| `fields` | array | ✅ | - | Campos a incluir no relatório |
+| `webhook_url` | string | ❌ | - | URL para envio assíncrono |
+| `subtasks` | boolean | ❌ | `false` | Incluir subtasks no relatório |
 
 **Resposta:** Arquivo Excel binário
 
@@ -126,7 +136,8 @@ Content-Type: application/json
 {
   "list_ids": ["901234567890"],
   "fields": ["name", "status", "due_date"],
-  "webhook_url": "https://seu-servidor.com/webhook"
+  "webhook_url": "https://seu-servidor.com/webhook",
+  "subtasks": true
 }
 ```
 
