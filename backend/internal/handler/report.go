@@ -4,23 +4,23 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
 
+	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 	"github.com/cleberrangel/clickup-excel-api/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
 // forceGC força garbage collection e libera memória ao OS
-func forceGC() {
+func forceGC(ctx context.Context) {
 	runtime.GC()
 	debug.FreeOSMemory()
-	log.Printf("[GC] Memória liberada")
+	logger.Get(ctx).Debug().Msg("GC executado, memória liberada")
 }
 
 // ReportHandler manipula requisições de relatório
@@ -80,29 +80,59 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Report] Iniciando geração - Listas: %d, Campos: %d, Webhook: %s",
-		len(req.ListIDs), len(req.Fields), req.WebhookURL)
+	log := logger.FromGin(c)
+	log.Info().
+		Int("lists", len(req.ListIDs)).
+		Int("fields", len(req.Fields)).
+		Str("webhook", req.WebhookURL).
+		Msg("Iniciando geração de relatório")
 
 	// Se webhook_url foi fornecido, processa de forma assíncrona
 	if req.WebhookURL != "" {
-		go h.processAsync(req)
+		// Faz estimativa rápida antes de iniciar processamento
+		subtasks := false
+		if req.Subtasks != nil {
+			subtasks = *req.Subtasks
+		}
+		
+		estimate, err := h.reportService.EstimateTasks(c.Request.Context(), req.ListIDs, subtasks)
+		if err != nil {
+			log.Warn().Err(err).Msg("Falha ao estimar tasks, continuando sem estimativa")
+		}
 
-		c.JSON(http.StatusOK, model.Response{
-			Success: true,
-		})
+		requestID := logger.GetRequestID(c.Request.Context())
+		go h.processAsync(req, requestID)
+
+		// Retorna resposta com estimativa (se disponível)
+		response := gin.H{
+			"success": true,
+			"message": "Processamento iniciado",
+		}
+		if estimate != nil {
+			response["estimate"] = gin.H{
+				"lists":          len(estimate.Lists),
+				"tasks_min":      estimate.TotalMin,
+				"tasks_max":      estimate.TotalMax,
+				"tasks_avg":      estimate.EstimatedAvg,
+				"estimated_time": estimate.EstimatedTime,
+			}
+		}
+		c.JSON(http.StatusOK, response)
 		return
 	}
 
 	// Processamento síncrono (sem webhook)
 	result, err := h.reportService.GenerateReport(c.Request.Context(), req)
 	if err != nil {
-		forceGC() // Libera memória mesmo em caso de erro
+		forceGC(c.Request.Context()) // Libera memória mesmo em caso de erro
 		h.handleError(c, err)
 		return
 	}
 
-	log.Printf("[Report] Relatório gerado - Tarefas: %d, Listas: %d",
-		result.TotalTasks, result.TotalLists)
+	log.Info().
+		Int("tasks", result.TotalTasks).
+		Int("lists", result.TotalLists).
+		Msg("Relatório gerado com sucesso")
 
 	// Configura headers de resposta
 	filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
@@ -132,31 +162,41 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 }
 
 // processAsync processa o relatório de forma assíncrona e envia para o webhook
-func (h *ReportHandler) processAsync(req model.ReportRequest) {
-	// Garante liberação de memória ao final
-	defer forceGC()
-
+func (h *ReportHandler) processAsync(req model.ReportRequest, requestID string) {
 	// Timeout de 90 minutos para processar até 200k+ tasks com retries
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	baseCtx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	defer cancel()
 
-	log.Printf("[Report Async] Iniciando processamento para webhook: %s (listas: %d, campos: %d)",
-		req.WebhookURL, len(req.ListIDs), len(req.Fields))
+	// Propaga request_id para o contexto async
+	ctx := logger.WithRequestID(baseCtx, requestID)
+	log := logger.Get(ctx)
+
+	// Garante liberação de memória ao final
+	defer forceGC(ctx)
+
+	log.Info().
+		Str("webhook", req.WebhookURL).
+		Int("lists", len(req.ListIDs)).
+		Int("fields", len(req.Fields)).
+		Msg("Iniciando processamento assíncrono")
 
 	result, err := h.reportService.GenerateReport(ctx, req)
 	if err != nil {
-		log.Printf("[Report Async] Erro ao gerar relatório: %v", err)
+		log.Error().Err(err).Msg("Erro ao gerar relatório")
 		// Contexto separado para webhook de erro (5 minutos)
-		webhookCtx, webhookCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		webhookCtx, webhookCancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer webhookCancel()
 		if webhookErr := h.webhookService.SendError(webhookCtx, req.WebhookURL, err); webhookErr != nil {
-			log.Printf("[Report Async] Erro ao enviar webhook de erro: %v", webhookErr)
+			log.Error().Err(webhookErr).Msg("Erro ao enviar webhook de erro")
 		}
 		return
 	}
 
-	log.Printf("[Report Async] Relatório gerado com sucesso - Tarefas: %d, Listas: %d, Folder: %s",
-		result.TotalTasks, result.TotalLists, result.FolderName)
+	log.Info().
+		Int("tasks", result.TotalTasks).
+		Int("lists", result.TotalLists).
+		Str("folder", result.FolderName).
+		Msg("Relatório gerado com sucesso")
 
 	stat, _ := os.Stat(result.FilePath)
 	size := int64(0)
@@ -164,23 +204,25 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 		size = stat.Size()
 	}
 
-	log.Printf("[Report Async] Enviando para webhook: %s (tamanho: %d bytes)",
-		req.WebhookURL, size)
+	log.Info().
+		Str("webhook", req.WebhookURL).
+		Int64("size_bytes", size).
+		Msg("Enviando para webhook")
 
 	// Contexto separado para webhook de sucesso (10 minutos para upload de arquivo grande)
-	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	webhookCtx, webhookCancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer webhookCancel()
 
 	if err := h.webhookService.SendSuccess(webhookCtx, req.WebhookURL, result); err != nil {
-		log.Printf("[Report Async] Erro ao enviar webhook de sucesso: %v", err)
+		log.Error().Err(err).Msg("Erro ao enviar webhook de sucesso")
 	} else {
-		log.Printf("[Report Async] Webhook enviado com sucesso!")
+		log.Info().Msg("Webhook enviado com sucesso")
 	}
 }
 
 // handleError trata erros e retorna resposta apropriada
 func (h *ReportHandler) handleError(c *gin.Context, err error) {
-	log.Printf("[Report] Erro ao gerar relatório: %v", err)
+	logger.FromGin(c).Error().Err(err).Msg("Erro ao gerar relatório")
 
 	switch err {
 	case model.ErrRateLimited:

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 	"github.com/cleberrangel/clickup-excel-api/internal/repository"
 	"golang.org/x/time/rate"
@@ -83,8 +83,13 @@ func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]
 		resp, err := c.doRequestWithRetry(ctx, url, listID, page)
 		if err != nil {
 			// Se falhou após todos os retries, retorna o que já coletou + erro
-			log.Printf("[ClickUp] Lista %s - Falha definitiva na página %d após %d tentativas. Coletadas: %d tarefas",
-				listID, page, RetryMaxAttempts, totalCollected)
+			logger.Get(ctx).Error().
+				Str("list_id", listID).
+				Int("page", page).
+				Int("attempts", RetryMaxAttempts).
+				Int("collected", totalCollected).
+				Err(err).
+				Msg("Falha definitiva na coleta")
 			return allTasks, fmt.Errorf("lista %s página %d: %w (coletadas %d tarefas antes do erro)", 
 				listID, page, err, totalCollected)
 		}
@@ -92,8 +97,13 @@ func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]
 		allTasks = append(allTasks, resp.Tasks...)
 		totalCollected = len(allTasks)
 
-		log.Printf("[ClickUp] Lista %s - Página %d: %d tarefas (total coletado: %d, last_page=%v)",
-			listID, page, len(resp.Tasks), totalCollected, resp.LastPage)
+		logger.Get(ctx).Info().
+			Str("list_id", listID).
+			Int("page", page).
+			Int("tasks", len(resp.Tasks)).
+			Int("total", totalCollected).
+			Bool("last_page", resp.LastPage).
+			Msg("Tasks coletadas")
 
 		// Condição de parada: última página ou menos que PageSize
 		if resp.LastPage || len(resp.Tasks) < PageSize {
@@ -103,7 +113,11 @@ func (c *Client) GetTasks(ctx context.Context, listID string, subtasks bool) ([]
 		page++
 	}
 
-	log.Printf("[ClickUp] Lista %s - Concluída: %d tarefas em %d páginas", listID, len(allTasks), page+1)
+	logger.Get(ctx).Info().
+		Str("list_id", listID).
+		Int("tasks", len(allTasks)).
+		Int("pages", page+1).
+		Msg("Lista concluída")
 	return allTasks, nil
 }
 
@@ -131,13 +145,22 @@ func (c *Client) doRequestWithRetry(ctx context.Context, url, listID string, pag
 
 		// Se ainda tem tentativas, aguarda e tenta novamente
 		if attempt < RetryMaxAttempts {
-			log.Printf("[ClickUp] Lista %s página %d - Tentativa %d/%d falhou: %v. Aguardando %v...",
-				listID, page, attempt, RetryMaxAttempts, err, RetryBackoff)
+			logger.Get(ctx).Warn().
+			Str("list_id", listID).
+			Int("page", page).
+			Int("attempt", attempt).
+			Int("max_attempts", RetryMaxAttempts).
+			Err(err).
+			Dur("backoff", RetryBackoff).
+			Msg("Tentativa falhou, aguardando retry")
 
 			select {
 			case <-time.After(RetryBackoff):
-				log.Printf("[ClickUp] Lista %s página %d - Retomando tentativa %d/%d",
-					listID, page, attempt+1, RetryMaxAttempts)
+				logger.Get(ctx).Info().
+					Str("list_id", listID).
+					Int("page", page).
+					Int("attempt", attempt+1).
+					Msg("Retomando tentativa")
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
@@ -168,7 +191,11 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 	totalTasks := 0
 
 	for i, listID := range listIDs {
-		log.Printf("[ClickUp] Processando lista %d/%d: %s", i+1, len(listIDs), listID)
+		logger.Get(ctx).Info().
+			Int("current", i+1).
+			Int("total", len(listIDs)).
+			Str("list_id", listID).
+			Msg("Processando lista")
 
 		page := 0
 		listTasks := 0
@@ -179,14 +206,17 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 				return fmt.Errorf("rate limiter: %w", err)
 			}
 
-			url := fmt.Sprintf("%s/list/%s/task?page=%d&subtasks=true&include_closed=true",
-				baseURL, listID, page)
+			url := buildTaskURL(listID, page, subtasks)
 
 			// Executa request com retry
 			resp, err := c.doRequestWithRetry(ctx, url, listID, page)
 			if err != nil {
-				log.Printf("[ClickUp] Lista %s - Falha na página %d: %v. Continuando com %d tarefas coletadas.",
-					listID, page, err, listTasks)
+				logger.Get(ctx).Warn().
+				Str("list_id", listID).
+				Int("page", page).
+				Err(err).
+				Int("collected", listTasks).
+				Msg("Falha na lista, continuando")
 				break // Continua para próxima lista
 			}
 
@@ -198,8 +228,14 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 			listTasks += len(resp.Tasks)
 			totalTasks += len(resp.Tasks)
 
-			log.Printf("[ClickUp] Lista %s - Página %d: %d tarefas (lista: %d, total: %d, last_page=%v)",
-				listID, page, len(resp.Tasks), listTasks, totalTasks, resp.LastPage)
+			logger.Get(ctx).Info().
+				Str("list_id", listID).
+				Int("page", page).
+				Int("page_tasks", len(resp.Tasks)).
+				Int("list_tasks", listTasks).
+				Int("total_tasks", totalTasks).
+				Bool("last_page", resp.LastPage).
+				Msg("Tasks coletadas")
 
 			// Condição de parada: última página ou menos que PageSize
 			if resp.LastPage || len(resp.Tasks) < PageSize {
@@ -209,10 +245,17 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 			page++
 		}
 
-		log.Printf("[ClickUp] Lista %s - Concluída: %d tarefas em %d páginas", listID, listTasks, page+1)
+		logger.Get(ctx).Info().
+			Str("list_id", listID).
+			Int("tasks", listTasks).
+			Int("pages", page+1).
+			Msg("Lista concluída")
 	}
 
-	log.Printf("[ClickUp] Total: %d tarefas de %d listas salvas no storage", totalTasks, len(listIDs))
+	logger.Get(ctx).Info().
+		Int("total_tasks", totalTasks).
+		Int("total_lists", len(listIDs)).
+		Msg("Todas as listas processadas")
 	return nil
 }
 
@@ -257,4 +300,88 @@ func (c *Client) doRequest(ctx context.Context, url string) (*model.TaskResponse
 	}
 
 	return &taskResp, nil
+}
+
+// EstimateTaskCount faz probe rápido para estimar quantidade de tasks nas listas
+func (c *Client) EstimateTaskCount(ctx context.Context, listIDs []string, subtasks bool) (*model.EstimateResult, error) {
+	log := logger.Get(ctx)
+	estimates := make([]model.TaskEstimate, 0, len(listIDs))
+	totalMin, totalMax := 0, 0
+
+	for _, listID := range listIDs {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limiter: %w", err)
+		}
+
+		// Busca apenas primeira página
+		url := buildTaskURL(listID, 0, subtasks)
+		resp, err := c.doRequest(ctx, url)
+		if err != nil {
+			log.Warn().
+				Str("list_id", listID).
+				Err(err).
+				Msg("Falha ao estimar tasks da lista")
+			continue
+		}
+
+		est := model.TaskEstimate{ListID: listID}
+
+		// Captura nome da lista da primeira task
+		if len(resp.Tasks) > 0 {
+			est.ListName = resp.Tasks[0].List.Name
+		}
+
+		if resp.LastPage {
+			// Contagem exata (menos de 100 tasks)
+			est.EstimatedMin = len(resp.Tasks)
+			est.EstimatedMax = len(resp.Tasks)
+			est.IsExact = true
+		} else {
+			// Estimativa: se tem 100 e não é última, assume 3-10x
+			est.EstimatedMin = len(resp.Tasks) * 3
+			est.EstimatedMax = len(resp.Tasks) * 10
+			est.IsExact = false
+		}
+
+		estimates = append(estimates, est)
+		totalMin += est.EstimatedMin
+		totalMax += est.EstimatedMax
+
+		log.Debug().
+			Str("list_id", listID).
+			Str("list_name", est.ListName).
+			Int("min", est.EstimatedMin).
+			Int("max", est.EstimatedMax).
+			Bool("exact", est.IsExact).
+			Msg("Estimativa calculada")
+	}
+
+	avgEstimate := (totalMin + totalMax) / 2
+	
+	// Calcula tempo estimado (aprox 1000 tasks/min)
+	estimatedTime := "< 1 minuto"
+	if avgEstimate > 1000 {
+		minMinutes := totalMin / 1000
+		maxMinutes := totalMax / 1000
+		if minMinutes < 1 {
+			minMinutes = 1
+		}
+		estimatedTime = fmt.Sprintf("%d-%d minutos", minMinutes, maxMinutes)
+	}
+
+	log.Info().
+		Int("lists", len(estimates)).
+		Int("total_min", totalMin).
+		Int("total_max", totalMax).
+		Int("avg", avgEstimate).
+		Str("time", estimatedTime).
+		Msg("Estimativa de tasks concluída")
+
+	return &model.EstimateResult{
+		Lists:         estimates,
+		TotalMin:      totalMin,
+		TotalMax:      totalMax,
+		EstimatedAvg:  avgEstimate,
+		EstimatedTime: estimatedTime,
+	}, nil
 }

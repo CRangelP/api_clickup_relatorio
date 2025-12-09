@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/client"
+	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 	"github.com/cleberrangel/clickup-excel-api/internal/repository"
 )
@@ -32,10 +32,19 @@ type ReportResult struct {
 	FolderName string
 }
 
+// EstimateTasks faz uma estimativa rápida das tasks antes de coletar
+func (s *ReportService) EstimateTasks(ctx context.Context, listIDs []string, subtasks bool) (*model.EstimateResult, error) {
+	return s.clickupClient.EstimateTaskCount(ctx, listIDs, subtasks)
+}
+
 // GenerateReport gera um relatório Excel a partir das listas e campos solicitados
 // Usa streaming para baixo consumo de memória
 func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequest) (*ReportResult, error) {
-	log.Printf("[Report] Iniciando geração com streaming - Listas: %d, Campos: %d", len(req.ListIDs), len(req.Fields))
+	log := logger.Get(ctx)
+	log.Info().
+		Int("lists", len(req.ListIDs)).
+		Int("fields", len(req.Fields)).
+		Msg("Iniciando geração de relatório")
 
 	// 1. Cria storage temporário
 	storage, err := repository.NewTaskStorage()
@@ -51,7 +60,7 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 		subtasks = *req.Subtasks
 	}
 
-	log.Printf("[Report] Fase 1: Coletando tasks do ClickUp (subtasks=%v)...", subtasks)
+	log.Info().Bool("subtasks", subtasks).Msg("Fase 1: Coletando tasks do ClickUp")
 	if err := s.clickupClient.GetTasksToStorage(ctx, req.ListIDs, storage, subtasks); err != nil {
 		return nil, fmt.Errorf("coletar tasks: %w", err)
 	}
@@ -59,16 +68,19 @@ func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequ
 	totalTasks := storage.GetTaskCount()
 	folderName := storage.GetFolderName()
 
-	log.Printf("[Report] Fase 1 concluída: %d tasks coletadas, folder: %s", totalTasks, folderName)
+	log.Info().
+		Int("tasks", totalTasks).
+		Str("folder", folderName).
+		Msg("Fase 1 concluída: tasks coletadas")
 
 	// 3. Gera Excel via streaming do storage
-	log.Printf("[Report] Fase 2: Gerando Excel via streaming...")
+	log.Info().Msg("Fase 2: Gerando Excel via streaming")
 	excelPath, err := s.excelGenerator.GenerateFromStorage(storage, req.Fields)
 	if err != nil {
 		return nil, fmt.Errorf("gerar excel: %w", err)
 	}
 
-	log.Printf("[Report] Fase 2 concluída: Excel gerado em %s", excelPath)
+	log.Info().Str("path", excelPath).Msg("Fase 2 concluída: Excel gerado")
 
 	return &ReportResult{
 		FilePath:   excelPath,

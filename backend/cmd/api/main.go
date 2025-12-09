@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	stdlog "log"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -9,6 +9,7 @@ import (
 	"github.com/cleberrangel/clickup-excel-api/internal/client"
 	"github.com/cleberrangel/clickup-excel-api/internal/config"
 	"github.com/cleberrangel/clickup-excel-api/internal/handler"
+	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/middleware"
 	"github.com/cleberrangel/clickup-excel-api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,17 @@ func main() {
 	// Carrega configurações
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Erro ao carregar configurações: %v", err)
+		stdlog.Fatalf("Erro ao carregar configurações: %v", err)
 	}
+
+	// Inicializa logger estruturado
+	logger.Init(cfg.LogLevel, cfg.LogJSON)
+	log := logger.Global()
+	log.Info().
+		Str("port", cfg.Port).
+		Str("log_level", cfg.LogLevel).
+		Bool("log_json", cfg.LogJSON).
+		Msg("Configurações carregadas")
 
 	// Inicializa dependências
 	clickupClient := client.NewClient(cfg.TokenClickUp)
@@ -32,7 +42,7 @@ func main() {
 
 	// Inicializa router
 	r := gin.New()
-	r.Use(gin.Logger())
+	r.Use(middleware.RequestID()) // Request ID + logging estruturado
 	r.Use(gin.Recovery())
 
 	// Health check (público)
@@ -76,10 +86,10 @@ func main() {
 
 	// Inicia servidor
 	port := cfg.Port
-	log.Printf("Servidor iniciando na porta %s", port)
+	log.Info().Str("port", port).Msg("Servidor iniciando")
 
 	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("Erro ao iniciar servidor: %v", err)
+		log.Fatal().Err(err).Msg("Erro ao iniciar servidor")
 		os.Exit(1)
 	}
 }

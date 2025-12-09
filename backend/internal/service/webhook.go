@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
 )
 
@@ -92,7 +92,12 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 			return fmt.Errorf("webhook retornou status %d: %s", resp.StatusCode, string(respBody))
 		}
 
-		log.Printf("[Webhook] Enviado com sucesso para %s (status: %d, modo=buffer, tamanho=%d bytes)", webhookURL, resp.StatusCode, stat.Size())
+		logger.Get(ctx).Info().
+			Str("url", webhookURL).
+			Int("status", resp.StatusCode).
+			Str("mode", "buffer").
+			Int64("size_bytes", stat.Size()).
+			Msg("Webhook enviado com sucesso")
 		return nil
 	}
 
@@ -159,7 +164,11 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 		return fmt.Errorf("webhook retornou status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	log.Printf("[Webhook] Enviado com sucesso para %s (status: %d, modo=streaming)", webhookURL, resp.StatusCode)
+	logger.Get(ctx).Info().
+		Str("url", webhookURL).
+		Int("status", resp.StatusCode).
+		Str("mode", "streaming").
+		Msg("Webhook enviado com sucesso")
 	return nil
 }
 
@@ -197,7 +206,10 @@ func (w *WebhookService) send(ctx context.Context, webhookURL string, payload mo
 		return fmt.Errorf("webhook retornou status %d", resp.StatusCode)
 	}
 
-	log.Printf("[Webhook] Enviado com sucesso para %s (status: %d)", webhookURL, resp.StatusCode)
+	logger.Get(ctx).Info().
+		Str("url", webhookURL).
+		Int("status", resp.StatusCode).
+		Msg("Webhook enviado com sucesso")
 
 	return nil
 }

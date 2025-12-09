@@ -13,6 +13,8 @@ type Config struct {
 	TokenAPI     string
 	Port         string
 	GinMode      string
+	LogLevel     string
+	LogJSON      bool
 }
 
 // ErrMissingToken indica que um token obrigatório não foi configurado
@@ -29,6 +31,8 @@ func Load() (*Config, error) {
 		TokenAPI:     os.Getenv("TOKEN_API"),
 		Port:         os.Getenv("PORT"),
 		GinMode:      os.Getenv("GIN_MODE"),
+		LogLevel:     os.Getenv("LOG_LEVEL"),
+		LogJSON:      os.Getenv("LOG_JSON") != "false", // default: true
 	}
 
 	// Validações obrigatórias
@@ -47,6 +51,10 @@ func Load() (*Config, error) {
 
 	if cfg.GinMode == "" {
 		cfg.GinMode = "debug"
+	}
+
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
 	}
 
 	return cfg, nil

@@ -2,7 +2,7 @@ openapi: "3.1.0"
 info:
   title: ClickUp Excel API
   description: API para geração de relatórios Excel a partir do ClickUp
-  version: "1.0.0"
+  version: "1.4.0"
 
 servers:
   - url: http://localhost:8080
@@ -38,6 +38,10 @@ components:
           format: uri
           description: URL do webhook para receber o resultado (processamento assíncrono)
           example: "https://seu-servidor.com/webhook"
+        subtasks:
+          type: boolean
+          default: false
+          description: Incluir subtasks no relatório (default: false, apenas main tasks)
     
     SuccessResponse:
       type: object
@@ -47,7 +51,26 @@ components:
           example: true
         message:
           type: string
-          example: "Processamento iniciado. O resultado será enviado para o webhook."
+          example: "Processamento iniciado"
+        estimate:
+          type: object
+          description: Estimativa de tasks (apenas quando webhook_url é fornecido)
+          properties:
+            lists:
+              type: integer
+              example: 5
+            tasks_min:
+              type: integer
+              example: 1500
+            tasks_max:
+              type: integer
+              example: 5000
+            tasks_avg:
+              type: integer
+              example: 3250
+            estimated_time:
+              type: string
+              example: "2-5 minutos"
     
     WebhookPayload:
       type: object
@@ -109,20 +132,30 @@ paths:
               $ref: "#/components/schemas/ReportRequest"
             examples:
               basico:
-                summary: Relatório Básico
+                summary: Relatório Básico (apenas main tasks)
                 value:
                   list_ids: ["901234567890"]
                   fields: ["name", "status", "assignees", "due_date", "date_created"]
-              campos_personalizados:
-                summary: Com Campos Personalizados
+                  subtasks: false
+              com_subtasks:
+                summary: Relatório com Subtasks
+                value:
+                  list_ids: ["901234567890"]
+                  fields: ["name", "status", "assignees", "due_date"]
+                  subtasks: true
+              webhook_async:
+                summary: Processamento Assíncrono (webhook)
                 value:
                   list_ids: ["901234567890", "901234567891"]
-                  fields: ["name", "status", "due_date", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                  fields: ["name", "status", "due_date"]
+                  webhook_url: "https://seu-servidor.com/webhook"
+                  subtasks: false
               completo:
                 summary: Relatório Completo
                 value:
                   list_ids: ["901234567890"]
                   fields: ["id", "name", "description", "status", "priority", "assignees", "tags", "date_created", "date_updated", "due_date", "start_date", "list", "folder", "url"]
+                  subtasks: false
       responses:
         "200":
           description: Arquivo Excel gerado com sucesso
