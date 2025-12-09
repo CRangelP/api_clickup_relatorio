@@ -146,7 +146,10 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 	result, err := h.reportService.GenerateReport(ctx, req)
 	if err != nil {
 		log.Printf("[Report Async] Erro ao gerar relatório: %v", err)
-		if webhookErr := h.webhookService.SendError(ctx, req.WebhookURL, err); webhookErr != nil {
+		// Contexto separado para webhook de erro (5 minutos)
+		webhookCtx, webhookCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer webhookCancel()
+		if webhookErr := h.webhookService.SendError(webhookCtx, req.WebhookURL, err); webhookErr != nil {
 			log.Printf("[Report Async] Erro ao enviar webhook de erro: %v", webhookErr)
 		}
 		return
@@ -164,7 +167,11 @@ func (h *ReportHandler) processAsync(req model.ReportRequest) {
 	log.Printf("[Report Async] Enviando para webhook: %s (tamanho: %d bytes)",
 		req.WebhookURL, size)
 
-	if err := h.webhookService.SendSuccess(ctx, req.WebhookURL, result); err != nil {
+	// Contexto separado para webhook de sucesso (10 minutos para upload de arquivo grande)
+	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer webhookCancel()
+
+	if err := h.webhookService.SendSuccess(webhookCtx, req.WebhookURL, result); err != nil {
 		log.Printf("[Report Async] Erro ao enviar webhook de sucesso: %v", err)
 	} else {
 		log.Printf("[Report Async] Webhook enviado com sucesso!")
