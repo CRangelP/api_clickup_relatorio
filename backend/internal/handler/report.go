@@ -110,7 +110,7 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 		Msg("Relatório gerado com sucesso")
 
 	// Configura headers de resposta
-	filename := fmt.Sprintf("%s - %s.xlsx", result.FolderName, time.Now().Format("02-01-2006"))
+	filename := fmt.Sprintf("%s.xlsx", result.FolderName)
 
 	file, err := os.Open(result.FilePath)
 	if err != nil {
