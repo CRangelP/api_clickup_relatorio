@@ -251,6 +251,9 @@ func (e *Extractor) extractDate(field model.CustomField) string {
 	case float64:
 		epochMs = int64(v)
 	case string:
+		if v == "" {
+			return "" // Campo de data vazio no ClickUp
+		}
 		parsed, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			log.Printf("[WARN] Date %s: não conseguiu parsear string: %v", field.ID, err)
