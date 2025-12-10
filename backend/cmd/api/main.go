@@ -15,6 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const Version = "1.4.2"
+
 func main() {
 	// Carrega configurações
 	cfg, err := config.Load()
@@ -26,10 +28,11 @@ func main() {
 	logger.Init(cfg.LogLevel, cfg.LogJSON)
 	log := logger.Global()
 	log.Info().
+		Str("version", Version).
 		Str("port", cfg.Port).
 		Str("log_level", cfg.LogLevel).
 		Bool("log_json", cfg.LogJSON).
-		Msg("Configurações carregadas")
+		Msg("ClickUp Excel API iniciando")
 
 	// Inicializa dependências
 	clickupClient := client.NewClient(cfg.TokenClickUp)
