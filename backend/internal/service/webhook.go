@@ -62,7 +62,7 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 			return fmt.Errorf("write file_mime: %w", err)
 		}
 
-		filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
+		filename := fmt.Sprintf("%s - %s.xlsx", result.FolderName, time.Now().Format("02-01-2006"))
 		part, err := writer.CreateFormFile("file", filepath.Base(filename))
 		if err != nil {
 			return fmt.Errorf("criar form file: %w", err)
@@ -129,7 +129,7 @@ func (w *WebhookService) SendSuccess(ctx context.Context, webhookURL string, res
 			return
 		}
 
-		filename := fmt.Sprintf("relatorio_%s.xlsx", time.Now().Format("2006-01-02_15-04-05"))
+		filename := fmt.Sprintf("%s - %s.xlsx", result.FolderName, time.Now().Format("02-01-2006"))
 		part, err := writer.CreateFormFile("file", filepath.Base(filename))
 		if err != nil {
 			pw.CloseWithError(fmt.Errorf("criar form file: %w", err))
