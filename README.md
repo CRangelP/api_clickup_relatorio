@@ -28,8 +28,9 @@ docker pull crangelp/clickup-excel-api:latest
 
 **Tags disponíveis:**
 - `latest` - Versão mais recente
+- `v1.4.2` - Fix bug paginação (last_page), resposta webhook simplificada
 - `v1.4.1` - Parâmetro `include_closed` (default: false, apenas tasks abertas)
-- `v1.4.0` - Structured logging, request tracing, estimação de tasks
+- `v1.4.0` - Structured logging, request tracing
 - `v1.3.0` - Parâmetro opcional `subtasks` (default: apenas main tasks)
 - `v1.2.8` - Melhorias de estabilidade
 - `v1.2.3` - GC forçado + endpoints de debug de memória
