@@ -10,7 +10,7 @@
       "modified": 1702166160000,
       "created": 1702166160000,
       "name": "ClickUp Excel API",
-      "description": "API para geração de relatórios Excel a partir do ClickUp (v1.4.2)",
+      "description": "API para geração de relatórios Excel a partir do ClickUp (v1.4.3)",
       "scope": "collection",
       "_type": "workspace"
     },

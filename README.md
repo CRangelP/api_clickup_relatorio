@@ -7,18 +7,20 @@ API REST para geração de relatórios Excel dinâmicos a partir de dados do Cli
 - **Schema-on-Read**: Configuração dinâmica de campos via payload JSON
 - **Paginação Automática**: Busca todas as tarefas independente do tamanho da lista
 - **Rate Limiting**: Controle de concorrência para respeitar limites da API do ClickUp
-- **Retry com Backoff**: Retry automático (3x) com espera de 90s em caso de timeout
+- **Retry com Backoff**: Retry automático (3x) com espera de 30s em caso de timeout
 - **Streaming**: Processamento em streaming para baixo consumo de memória (~300MB para 35k+ tasks) e envio binário direto (sem base64)
-- **Webhook Assíncrono**: Processamento em background com envio do resultado via webhook multipart/form-data
-- **Tratamento de Tipos**: Conversão automática de dropdowns, datas, moedas, etc.
+- **Webhook Assíncrono**: Processamento em background (até 90 min) com envio do resultado via webhook multipart/form-data
+- **Tratamento de Tipos**: Conversão automática de dropdowns, datas, moedas, labels, etc.
 - **Timezone**: Datas formatadas em `America/Sao_Paulo`
+- **Structured Logging**: Logs em JSON com request tracing via `X-Request-ID`
 - **Segurança**: Autenticação via Bearer Token
 
 ## Stack
 
-- **Go 1.18+** com Gin Gonic
+- **Go 1.23+** com Gin Gonic
 - **excelize** para geração de Excel
-- **Docker** com multistage build
+- **zerolog** para structured logging
+- **Docker** com multistage build (~15MB)
 
 ## Docker Hub
 
@@ -28,16 +30,12 @@ docker pull crangelp/clickup-excel-api:latest
 
 **Tags disponíveis:**
 - `latest` - Versão mais recente
+- `v1.4.3` - Fix tratamento de campos de data vazios no ClickUp
 - `v1.4.2` - Fix bug paginação (last_page), resposta webhook simplificada
 - `v1.4.1` - Parâmetro `include_closed` (default: false, apenas tasks abertas)
 - `v1.4.0` - Structured logging, request tracing
 - `v1.3.0` - Parâmetro opcional `subtasks` (default: apenas main tasks)
-- `v1.2.8` - Melhorias de estabilidade
-- `v1.2.3` - GC forçado + endpoints de debug de memória
-- `v1.2.2` - Suporte a volume para persistência
-- `v1.2.1` - Fix isolamento de requisições paralelas
 - `v1.2.0` - Streaming + baixo consumo de memória
-- `v1.1.0` - Retry com backoff
 - `v1.0.0` - Versão inicial
 
 ## Configuração
@@ -52,12 +50,15 @@ cp .env.example .env
 
 Configure as variáveis:
 
-| Variável | Descrição | Obrigatório |
-|----------|-----------|-------------|
-| `TOKEN_CLICKUP` | Token pessoal do ClickUp (pk_...) | ✅ |
-| `TOKEN_API` | Token de autenticação da API | ✅ |
-| `PORT` | Porta do servidor (default: 8080) | ❌ |
-| `GIN_MODE` | Modo do Gin: debug/release | ❌ |
+| Variável | Descrição | Obrigatório | Default |
+|----------|-----------|-------------|---------|
+| `TOKEN_CLICKUP` | Token pessoal do ClickUp (pk_...) | ✅ | - |
+| `TOKEN_API` | Token de autenticação da API | ✅ | - |
+| `PORT` | Porta do servidor | ❌ | `8080` |
+| `GIN_MODE` | Modo do Gin: debug/release | ❌ | `debug` |
+| `LOG_LEVEL` | Nível de log: debug/info/warn/error | ❌ | `info` |
+| `LOG_JSON` | Logs em formato JSON (true/false) | ❌ | `true` |
+| `TZ` | Timezone para formatação de datas | ❌ | `America/Sao_Paulo` |
 
 ### Obtendo o Token do ClickUp
 
@@ -214,12 +215,13 @@ Use o UUID do campo personalizado do ClickUp. O sistema automaticamente:
 | Configuração | Valor |
 |--------------|-------|
 | ClickUp API | 10.000 requests/minuto |
-| Rate Limiter | 100 requests/minuto (conservador) |
+| Rate Limiter | 2.000 requests/minuto (conservador) |
 | Timeout por request | 60 segundos |
 | Retry por página | 3 tentativas |
-| Backoff entre retries | 90 segundos |
-| Timeout processamento async | 30 minutos |
-| Timeout webhook | 120 segundos |
+| Backoff entre retries | 30 segundos |
+| Timeout processamento async | 90 minutos |
+| Timeout webhook sucesso | 10 minutos |
+| Timeout webhook erro | 5 minutos |
 
 ## Consumo de Memória
 
@@ -234,19 +236,26 @@ Use o UUID do campo personalizado do ClickUp. O sistema automaticamente:
 ## Estrutura do Projeto
 
 ```
-backend/
-├── cmd/api/
-│   └── main.go              # Entry point
-├── internal/
-│   ├── config/              # Configurações
-│   ├── middleware/          # Middleware de auth
-│   ├── handler/             # HTTP handlers
-│   ├── service/             # Lógica de negócio
-│   ├── repository/          # Storage temporário
-│   ├── client/              # Cliente ClickUp
-│   └── model/               # Structs
-├── Dockerfile
-└── go.mod
+├── backend/
+│   ├── cmd/api/
+│   │   └── main.go          # Entry point
+│   ├── internal/
+│   │   ├── client/          # Cliente HTTP ClickUp
+│   │   ├── config/          # Carregamento de configurações
+│   │   ├── handler/         # HTTP handlers (Gin)
+│   │   ├── logger/          # Structured logging (zerolog)
+│   │   ├── middleware/      # Auth e request ID
+│   │   ├── model/           # Structs e tipos
+│   │   ├── repository/      # Storage temporário (disco)
+│   │   └── service/         # Lógica de negócio
+│   ├── Dockerfile
+│   └── go.mod
+├── api/
+│   └── insomnia_collection.json
+├── docker-compose.yml
+├── stack.yaml               # Docker Swarm local
+├── stack-prod.yaml          # Docker Swarm produção
+└── .env.example
 ```
 
 ## Deploy com Docker Swarm
