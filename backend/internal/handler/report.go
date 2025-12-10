@@ -89,39 +89,10 @@ func (h *ReportHandler) GenerateReport(c *gin.Context) {
 
 	// Se webhook_url foi fornecido, processa de forma assíncrona
 	if req.WebhookURL != "" {
-		// Faz estimativa rápida antes de iniciar processamento
-		subtasks := false
-		if req.Subtasks != nil {
-			subtasks = *req.Subtasks
-		}
-		includeClosed := false
-		if req.IncludeClosed != nil {
-			includeClosed = *req.IncludeClosed
-		}
-		
-		estimate, err := h.reportService.EstimateTasks(c.Request.Context(), req.ListIDs, subtasks, includeClosed)
-		if err != nil {
-			log.Warn().Err(err).Msg("Falha ao estimar tasks, continuando sem estimativa")
-		}
-
 		requestID := logger.GetRequestID(c.Request.Context())
 		go h.processAsync(req, requestID)
 
-		// Retorna resposta com estimativa (se disponível)
-		response := gin.H{
-			"success": true,
-			"message": "Processamento iniciado",
-		}
-		if estimate != nil {
-			response["estimate"] = gin.H{
-				"lists":          len(estimate.Lists),
-				"tasks_min":      estimate.TotalMin,
-				"tasks_max":      estimate.TotalMax,
-				"tasks_avg":      estimate.EstimatedAvg,
-				"estimated_time": estimate.EstimatedTime,
-			}
-		}
-		c.JSON(http.StatusOK, response)
+		c.JSON(http.StatusOK, gin.H{"success": true})
 		return
 	}
 

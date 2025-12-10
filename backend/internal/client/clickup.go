@@ -237,8 +237,8 @@ func (c *Client) GetTasksToStorage(ctx context.Context, listIDs []string, storag
 				Bool("last_page", resp.LastPage).
 				Msg("Tasks coletadas")
 
-			// Condição de parada: última página ou menos que PageSize
-			if resp.LastPage || len(resp.Tasks) < PageSize {
+			// Condição de parada: última página
+			if resp.LastPage {
 				break
 			}
 
@@ -302,86 +302,3 @@ func (c *Client) doRequest(ctx context.Context, url string) (*model.TaskResponse
 	return &taskResp, nil
 }
 
-// EstimateTaskCount faz probe rápido para estimar quantidade de tasks nas listas
-func (c *Client) EstimateTaskCount(ctx context.Context, listIDs []string, subtasks, includeClosed bool) (*model.EstimateResult, error) {
-	log := logger.Get(ctx)
-	estimates := make([]model.TaskEstimate, 0, len(listIDs))
-	totalMin, totalMax := 0, 0
-
-	for _, listID := range listIDs {
-		if err := c.limiter.Wait(ctx); err != nil {
-			return nil, fmt.Errorf("rate limiter: %w", err)
-		}
-
-		// Busca apenas primeira página
-		url := buildTaskURL(listID, 0, subtasks, includeClosed)
-		resp, err := c.doRequest(ctx, url)
-		if err != nil {
-			log.Warn().
-				Str("list_id", listID).
-				Err(err).
-				Msg("Falha ao estimar tasks da lista")
-			continue
-		}
-
-		est := model.TaskEstimate{ListID: listID}
-
-		// Captura nome da lista da primeira task
-		if len(resp.Tasks) > 0 {
-			est.ListName = resp.Tasks[0].List.Name
-		}
-
-		if resp.LastPage {
-			// Contagem exata (menos de 100 tasks)
-			est.EstimatedMin = len(resp.Tasks)
-			est.EstimatedMax = len(resp.Tasks)
-			est.IsExact = true
-		} else {
-			// Estimativa: se tem 100 e não é última, assume 3-10x
-			est.EstimatedMin = len(resp.Tasks) * 3
-			est.EstimatedMax = len(resp.Tasks) * 10
-			est.IsExact = false
-		}
-
-		estimates = append(estimates, est)
-		totalMin += est.EstimatedMin
-		totalMax += est.EstimatedMax
-
-		log.Debug().
-			Str("list_id", listID).
-			Str("list_name", est.ListName).
-			Int("min", est.EstimatedMin).
-			Int("max", est.EstimatedMax).
-			Bool("exact", est.IsExact).
-			Msg("Estimativa calculada")
-	}
-
-	avgEstimate := (totalMin + totalMax) / 2
-	
-	// Calcula tempo estimado (aprox 1000 tasks/min)
-	estimatedTime := "< 1 minuto"
-	if avgEstimate > 1000 {
-		minMinutes := totalMin / 1000
-		maxMinutes := totalMax / 1000
-		if minMinutes < 1 {
-			minMinutes = 1
-		}
-		estimatedTime = fmt.Sprintf("%d-%d minutos", minMinutes, maxMinutes)
-	}
-
-	log.Info().
-		Int("lists", len(estimates)).
-		Int("total_min", totalMin).
-		Int("total_max", totalMax).
-		Int("avg", avgEstimate).
-		Str("time", estimatedTime).
-		Msg("Estimativa de tasks concluída")
-
-	return &model.EstimateResult{
-		Lists:         estimates,
-		TotalMin:      totalMin,
-		TotalMax:      totalMax,
-		EstimatedAvg:  avgEstimate,
-		EstimatedTime: estimatedTime,
-	}, nil
-}

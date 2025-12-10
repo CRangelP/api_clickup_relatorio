@@ -32,11 +32,6 @@ type ReportResult struct {
 	FolderName string
 }
 
-// EstimateTasks faz uma estimativa rápida das tasks antes de coletar
-func (s *ReportService) EstimateTasks(ctx context.Context, listIDs []string, subtasks, includeClosed bool) (*model.EstimateResult, error) {
-	return s.clickupClient.EstimateTaskCount(ctx, listIDs, subtasks, includeClosed)
-}
-
 // GenerateReport gera um relatório Excel a partir das listas e campos solicitados
 // Usa streaming para baixo consumo de memória
 func (s *ReportService) GenerateReport(ctx context.Context, req model.ReportRequest) (*ReportResult, error) {
