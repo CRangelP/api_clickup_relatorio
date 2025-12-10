@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/cleberrangel/clickup-excel-api/internal/logger"
 	"github.com/cleberrangel/clickup-excel-api/internal/model"
