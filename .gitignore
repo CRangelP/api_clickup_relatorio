@@ -34,6 +34,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+design.md
 
 # Temporários
 tmp/

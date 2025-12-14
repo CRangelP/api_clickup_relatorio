@@ -1,19 +1,68 @@
 version: "3.8"
 
 services:
-  api:
-    image: crangelp/clickup-excel-api:v1.2.8
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${DB_NAME:-clickup_updater}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - TZ=America/Sao_Paulo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - clickup-internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-clickup_updater}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: crangelp/clickup-excel-api:v1.4.3
     environment:
       - TOKEN_CLICKUP=${TOKEN_CLICKUP}
       - TOKEN_API=${TOKEN_API}
       - PORT=8080
       - GIN_MODE=release
       - TZ=America/Sao_Paulo
+      - LOG_LEVEL=info
+      - LOG_JSON=true
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - DATA_DIR=/app/data
       - GOGC=50
+      # Database configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-clickup_updater}
+      - DB_SSLMODE=disable
+      - DB_MAX_OPEN_CONNS=25
+      - DB_MAX_IDLE_CONNS=10
     volumes:
       - clickup_data:/app/data
     networks:
+      - clickup-internal
       - traefik-public
     deploy:
       mode: replicated
@@ -35,12 +84,6 @@ services:
         reservations:
           cpus: "0.25"
           memory: 256M
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.clickup-api.rule=Host(`clickup-api.${DOMAIN}`)"
-        - "traefik.http.routers.clickup-api.entrypoints=websecure"
-        - "traefik.http.routers.clickup-api.tls.certresolver=letsencrypt"
-        - "traefik.http.services.clickup-api.loadbalancer.server.port=8080"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -53,10 +96,56 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  frontend:
+    image: crangelp/clickup-field-updater-frontend:latest
+    networks:
+      - clickup-internal
+      - traefik-public
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.clickup-frontend.rule=Host(`clickup.${DOMAIN}`)"
+        - "traefik.http.routers.clickup-frontend.entrypoints=websecure"
+        - "traefik.http.routers.clickup-frontend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.clickup-frontend.loadbalancer.server.port=80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
+  clickup-internal:
+    driver: overlay
   traefik-public:
     external: true
 
 volumes:
+  postgres_data:
+    driver: local
   clickup_data:
     driver: local

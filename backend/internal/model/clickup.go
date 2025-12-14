@@ -118,3 +118,75 @@ type FolderInfo struct {
 type SpaceInfo struct {
 	ID string `json:"id"`
 }
+
+// Metadata API Response Types
+
+// WorkspaceResponse representa a resposta da API para workspaces
+type WorkspaceResponse struct {
+	Teams []Workspace `json:"teams"`
+}
+
+// Workspace representa um workspace do ClickUp
+type Workspace struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// SpaceResponse representa a resposta da API para spaces
+type SpaceResponse struct {
+	Spaces []Space `json:"spaces"`
+}
+
+// Space representa um space do ClickUp
+type Space struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// FolderResponse representa a resposta da API para folders
+type FolderResponse struct {
+	Folders []Folder `json:"folders"`
+}
+
+// Folder representa um folder do ClickUp
+type Folder struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListResponse representa a resposta da API para listas
+type ListResponse struct {
+	Lists []List `json:"lists"`
+}
+
+// List representa uma lista do ClickUp
+type List struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// CustomFieldResponse representa a resposta da API para campos personalizados
+type CustomFieldResponse struct {
+	Fields []CustomFieldMetadata `json:"fields"`
+}
+
+// CustomFieldMetadata representa metadados de um campo personalizado
+type CustomFieldMetadata struct {
+	ID         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Type       string                 `json:"type"`
+	TypeConfig *TypeConfig           `json:"type_config"`
+	Required   bool                   `json:"required"`
+}
+
+// UserResponse representa a resposta da API para informações do usuário
+type UserResponse struct {
+	User UserInfo `json:"user"`
+}
+
+// UserInfo representa informações básicas do usuário
+type UserInfo struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}

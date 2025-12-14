@@ -1,20 +1,64 @@
-version: "3.8"
-
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: clickup-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-clickup_updater}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - TZ=America/Sao_Paulo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-clickup_updater}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - clickup-network
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: clickup-excel-api
+    container_name: clickup-backend
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     environment:
       - TOKEN_CLICKUP=${TOKEN_CLICKUP}
       - TOKEN_API=${TOKEN_API}
       - PORT=8080
       - GIN_MODE=${GIN_MODE:-release}
       - TZ=America/Sao_Paulo
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_JSON=${LOG_JSON:-true}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-default-encryption-key-32bytes!!}
+      # Database configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-clickup_updater}
+      - DB_SSLMODE=disable
+      # Connection pool settings
+      - DB_MAX_OPEN_CONNS=${DB_MAX_OPEN_CONNS:-25}
+      - DB_MAX_IDLE_CONNS=${DB_MAX_IDLE_CONNS:-10}
+      - DB_CONN_MAX_LIFETIME=${DB_CONN_MAX_LIFETIME:-5}
+      - DB_CONN_MAX_IDLE_TIME=${DB_CONN_MAX_IDLE_TIME:-2}
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -26,3 +70,37 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      - clickup-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clickup-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - clickup-network
+
+volumes:
+  postgres_data:
+  backend_data:
+
+networks:
+  clickup-network:
+    driver: bridge
