@@ -10,6 +10,7 @@ backend/api
 *.test
 *.out
 coverage.html
+*.kiro
 
 # Dependências
 vendor/
